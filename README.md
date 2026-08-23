@@ -3,6 +3,8 @@
 Your own recipe book, kept in your browser. Nothing is uploaded, nothing needs
 an account, and there is no server to go down.
 
+Live at **https://recipelist.github.io/**
+
 The point of it is the shape a recipe is stored in. A recipe here is a **tree,
 not a list**: every step names the ingredients and earlier step results it
 consumes. That one decision is what lets the same recipe be drawn two ways
