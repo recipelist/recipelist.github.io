@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Recipe List</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg?v=1">
+<meta name="description" content="Your own recipe book, kept in your browser. Ingredients-and-operations grid or a plain list, searchable and tagged, with cook mode, a servings scaler, a shopping list and a week planner.">
+<meta name="theme-color" content="#14110e" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Recipes">
+<link rel="stylesheet" href="css/style.css?v=1">
+<script>
+  /* Theme before first paint, so a dark load never flashes white.
+     Dark is the default; light is opt-in and stored under rl-theme. */
+  (function () {
+    var t = null;
+    try { t = localStorage.getItem('rl-theme'); } catch (e) {}
+    document.documentElement.className = (t === 'light') ? 'light' : 'dark';
+  })();
+</script>
+</head>
+<body>
+<div class="app">
+
+<nav class="tabs">
+  <div class="brand">
+    <span class="brand-logo" aria-hidden="true">
+      <!-- Same mark as favicon.svg: a pot with a rising curl of steam. -->
+      <svg viewBox="0 0 40 40">
+        <path d="M8 17h24v9a6 6 0 0 1-6 6H14a6 6 0 0 1-6-6z" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round"/>
+        <path d="M8 21H5.5M32 21h2.5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>
+        <path d="M20 13c3-2 3-4 0-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+      </svg>
+    </span>
+    <span class="brand-name">Recipe List</span>
+  </div>
+
+  <div class="tab-list">
+    <button class="active" data-tab="recipes" title="Everything you have saved">
+      <svg viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M9 8h6M9 12h6"/></svg>
+      <span class="tab-label">Recipes <span id="recipeCount" class="pill"></span></span></button>
+    <button data-tab="kitchen" title="This week's plan and the shopping list it makes">
+      <svg viewBox="0 0 24 24"><path d="M4 5h16v15H4z"/><path d="M4 10h16"/><path d="M9 10v10"/></svg>
+      <span class="tab-label">Kitchen <span id="shopCount" class="pill"></span></span></button>
+  </div>
+
+  <!-- The foot is display:contents on a phone, so this button falls into the
+       bottom bar as its last stop, still Settings and still labelled so. -->
+  <div class="tabs-foot">
+    <button data-tab="settings" title="Settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span class="tab-label">Settings</span></button>
+  </div>
+</nav>
+
+<main class="main" id="main">
+  <!-- The rail carries the name on desktop, where this is hidden; on a phone
+       the rail is a bottom bar with no room for it, so the page takes it. -->
+  <h1 class="page-brand"><span class="brand-logo" aria-hidden="true">
+    <svg viewBox="0 0 40 40">
+      <path d="M8 17h24v9a6 6 0 0 1-6 6H14a6 6 0 0 1-6-6z" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round"/>
+      <path d="M8 21H5.5M32 21h2.5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>
+      <path d="M20 13c3-2 3-4 0-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+    </svg></span> Recipe List</h1>
+
+  <section class="page" id="page-recipes"></section>
+  <section class="page" id="page-kitchen" hidden></section>
+  <section class="page" id="page-settings" hidden></section>
+  <section class="page" id="page-recipe" hidden></section>
+  <section class="page" id="page-edit" hidden></section>
+</main>
+
+</div><!-- /.app -->
+
+<!-- Cook mode lives outside .app: it covers everything, rail included. -->
+<div class="cook" id="cook" hidden></div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="js/units.js?v=1"></script>
+<script src="js/store.js?v=1"></script>
+<script src="js/parse.js?v=1"></script>
+<script src="js/grid.js?v=1"></script>
+<script src="js/samples.js?v=1"></script>
+<script src="js/app.js?v=1"></script>
+</body>
+</html>
