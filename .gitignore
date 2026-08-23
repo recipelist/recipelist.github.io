@@ -1,2 +1,14 @@
 .DS_Store
 Thumbs.db
+
+# Assistant and editor instruction files. These stay on the machine that uses
+# them rather than in the repo: they are notes to a tool, not part of the site,
+# and they go stale in public in a way the code does not.
+CLAUDE.md
+AGENTS.md
+GEMINI.md
+.claude/
+.cursor/
+.cursorrules
+.aider*
+.github/copilot-instructions.md
