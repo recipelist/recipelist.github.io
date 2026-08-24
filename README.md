@@ -53,9 +53,12 @@ takes it full screen with the ingredient column pinned.
 - **Cook mode** — one step at a time, full screen, with the ingredients that
   step needs as a checklist, timers read out of the step text ("simmer 20
   minutes"), and the screen kept awake.
-- **Kitchen** — a week planner, and a shopping list that merges duplicate
-  ingredients across recipes and groups them by aisle. Planning from a recipe
-  offers the next fortnight, or a calendar for any date beyond it.
+- **Meal Plan** — a week planner you can page back and forth through.
+  Planning from a recipe offers the next fortnight, or a calendar for any date
+  beyond it.
+- **Shopping** — everything the plan needs, merging duplicate ingredients
+  across recipes and grouping them by aisle, plus anything else you add by
+  hand. The tab carries a count of what is still to buy.
 - **Settings** — dark or light, default view, export and import, auto-save to
   a file, and the storage health readout.
 

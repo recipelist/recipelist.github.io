@@ -234,8 +234,6 @@ svg.filled { fill: currentColor; }
 .seg button:hover { color: var(--accent); }
 .seg button + button { border-left: 1px solid var(--line); }
 .seg button.on { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
-.seg.seg-wide { display: flex; width: 100%; margin-bottom: 1rem; }
-.seg.seg-wide button { flex: 1; padding: .5rem; font-size: .9rem; }
 
 input[type=search], input[type=text], input[type=url], input[type=number], textarea, select {
   width: 100%; padding: .55rem .7rem; font-family: inherit; font-size: .95rem;

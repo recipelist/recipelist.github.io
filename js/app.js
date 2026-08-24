@@ -6,7 +6,8 @@
      #recipes                the library
      #r/<id>                 one recipe
      #edit/<id> | #new       the editor
-     #kitchen | #kitchen/shop
+     #plan                   the meal plan
+     #shop                   the shopping list
      #settings
      #cook/<id>              cook mode, over the top of everything
 
@@ -23,7 +24,7 @@ var $$ = function (sel, root) {
   return Array.prototype.slice.call((root || document).querySelectorAll(sel));
 };
 
-var PAGES = { recipes: null, kitchen: null, settings: null, recipe: null, edit: null };
+var PAGES = { recipes: null, plan: null, shop: null, settings: null, recipe: null, edit: null };
 var main, cookEl, toastEl;
 
 var state = {
@@ -35,7 +36,6 @@ var state = {
   view: 'grid',          /* per-recipe view, seeded from prefs */
   factor: 1,
   servings: null,
-  kitchenTab: 'plan',
   weekOffset: 0,
   editor: null,          /* the working copy while editing */
   dirty: false,
@@ -62,7 +62,11 @@ function parseHash() {
   var parts = h.split('/');
   var name = parts[0], arg = parts.slice(1).join('/');
   if (name === 'r' || name === 'edit' || name === 'cook') return { name: name, arg: arg };
-  if (name === 'kitchen') return { name: 'kitchen', arg: arg || 'plan' };
+  if (name === 'plan' || name === 'shop') return { name: name, arg: '' };
+  /* The plan and the list used to live behind one Kitchen tab. Old links
+     keep working: route() rewrites them, and this is the belt to that
+     braces in case anything reaches parseHash() another way. */
+  if (name === 'kitchen') return { name: arg === 'shop' ? 'shop' : 'plan', arg: '' };
   if (name === 'new' || name === 'settings' || name === 'recipes') return { name: name, arg: arg };
   return { name: 'recipes', arg: '' };
 }
@@ -73,6 +77,16 @@ function go(hash) {
 }
 
 function route() {
+  /* #kitchen, #kitchen/plan and #kitchen/shop were the two views behind one
+     tab, and both are still out there in bookmarks. Rewrite rather than
+     redirect, so following an old link does not leave a dead step in the
+     history that the back button walks straight back into. */
+  var old = (location.hash || '').replace(/^#/, '').split('/');
+  if (old[0] === 'kitchen') {
+    location.replace('#' + (old[1] === 'shop' ? 'shop' : 'plan'));
+    return;
+  }
+
   var next = parseHash();
 
   /* Leaving the editor with unsaved work is the one navigation worth
@@ -102,7 +116,7 @@ function route() {
 
   Object.keys(PAGES).forEach(function (k) { PAGES[k].hidden = (k !== page); });
 
-  var tabFor = { recipes: 'recipes', recipe: 'recipes', edit: 'recipes', kitchen: 'kitchen', settings: 'settings' };
+  var tabFor = { recipes: 'recipes', recipe: 'recipes', edit: 'recipes', plan: 'plan', shop: 'shop', settings: 'settings' };
   $$('.tabs button[data-tab]').forEach(function (b) {
     b.classList.toggle('active', b.getAttribute('data-tab') === tabFor[page]);
   });
@@ -110,7 +124,8 @@ function route() {
   if (page === 'recipes') renderRecipes();
   else if (page === 'recipe') renderRecipe(next.arg);
   else if (page === 'edit') renderEditor(next.name === 'new' ? null : next.arg);
-  else if (page === 'kitchen') { state.kitchenTab = (next.arg === 'shop' ? 'shop' : 'plan'); renderKitchen(); }
+  else if (page === 'plan') renderPlan();
+  else if (page === 'shop') renderShop();
   else if (page === 'settings') renderSettings();
 
   main.scrollTop = 0;
@@ -695,7 +710,7 @@ function openPaste() {
   });
 }
 
-/* ---------------- kitchen: plan and shopping list ---------------- */
+/* ---------------- the meal plan and the shopping list ---------------- */
 
 function dayKey(d) {
   return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
@@ -713,14 +728,20 @@ function weekStart(offset) {
 var DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-function renderKitchen() {
-  var html = '<header class="page-head"><h1>Kitchen</h1></header>' +
-    '<div class="seg seg-wide">' +
-      '<button class="' + (state.kitchenTab === 'plan' ? 'on' : '') + '" data-act="ktab" data-k="plan">Plan</button>' +
-      '<button class="' + (state.kitchenTab === 'shop' ? 'on' : '') + '" data-act="ktab" data-k="shop">Shopping list</button>' +
-    '</div>';
-  html += (state.kitchenTab === 'plan' ? planHTML() : shopHTML());
-  PAGES.kitchen.innerHTML = html;
+function renderPlan() {
+  PAGES.plan.innerHTML = '<header class="page-head"><h1>Meal Plan</h1></header>' + planHTML();
+}
+
+function renderShop() {
+  PAGES.shop.innerHTML = '<header class="page-head"><h1>Shopping list</h1></header>' + shopHTML();
+}
+
+/* The two pages share most of their actions, and every one of them ends by
+   drawing the page again. Which page that is belongs to the route, not to
+   each caller, so they all come through here. */
+function redrawKitchen() {
+  if (state.route.name === 'shop') renderShop();
+  else renderPlan();
 }
 
 function planHTML() {
@@ -1096,7 +1117,7 @@ function planPicker(dayK) {
     plan.days[dayK].push({ recipe: r.id, servings: r.servings });
     RLStore.setPlan(plan);
     wrap.remove();
-    renderKitchen();
+    redrawKitchen();
     toast(r.title + ' added to ' + prettyDay(dayK) + '.');
   });
 }
@@ -1279,12 +1300,10 @@ function handleClick(e) {
       break;
     case 'pickone': togglePick(btn.getAttribute('data-step'), btn.getAttribute('data-target')); break;
 
-    /* kitchen */
-    case 'ktab': go('kitchen/' + btn.getAttribute('data-k')); break;
     case 'week': {
       var d = btn.getAttribute('data-d');
       state.weekOffset = (d === '0') ? 0 : state.weekOffset + Number(d);
-      renderKitchen();
+      redrawKitchen();
       break;
     }
     case 'planadd': planPicker(btn.getAttribute('data-day')); break;
@@ -1292,7 +1311,7 @@ function handleClick(e) {
       var plan = RLStore.getPlan(), k = btn.getAttribute('data-day');
       plan.days[k] = (plan.days[k] || []).filter(function (x) { return x.recipe !== btn.getAttribute('data-id'); });
       RLStore.setPlan(plan);
-      renderKitchen();
+      redrawKitchen();
       break;
     }
     case 'week2list': weekToList(); break;
@@ -1301,28 +1320,28 @@ function handleClick(e) {
       var p2 = RLStore.getPlan(), s2 = weekStart(state.weekOffset);
       for (var i = 0; i < 7; i++) { var dd = new Date(s2); dd.setDate(dd.getDate() + i); delete p2.days[dayKey(dd)]; }
       RLStore.setPlan(p2);
-      renderKitchen();
+      redrawKitchen();
       break;
     }
     case 'shoprm': {
       var sh = RLStore.getShop();
       sh.recipes = sh.recipes.filter(function (x) { return x.recipe !== id; });
       RLStore.setShop(sh);
-      renderKitchen(); updateCounts();
+      redrawKitchen(); updateCounts();
       break;
     }
     case 'shoptick': {
       var sh2 = RLStore.getShop(), key = btn.getAttribute('data-key');
       if (sh2.done[key]) delete sh2.done[key]; else sh2.done[key] = 1;
       RLStore.setShop(sh2);
-      renderKitchen(); updateCounts();
+      redrawKitchen(); updateCounts();
       break;
     }
     case 'extrarm': {
       var sh3 = RLStore.getShop();
       sh3.extras = sh3.extras.filter(function (x) { return x.id !== id; });
       RLStore.setShop(sh3);
-      renderKitchen(); updateCounts();
+      redrawKitchen(); updateCounts();
       break;
     }
     case 'shopcopy': {
@@ -1354,14 +1373,14 @@ function handleClick(e) {
         });
       });
       RLStore.setShop(sh4);
-      renderKitchen(); updateCounts();
+      redrawKitchen(); updateCounts();
       toast('Ticked items cleared.');
       break;
     }
     case 'shopclear': {
       if (!confirm('Empty the whole shopping list?')) break;
       RLStore.setShop({ recipes: [], extras: [], done: {} });
-      renderKitchen(); updateCounts();
+      redrawKitchen(); updateCounts();
       break;
     }
 
@@ -1569,8 +1588,7 @@ function weekToList() {
     });
   }
   RLStore.setShop(shop);
-  state.kitchenTab = 'shop';
-  go('kitchen/shop');
+  go('shop');
   toast(added ? added + ' meals sent to the shopping list.' : 'Nothing planned this week.');
 }
 
@@ -1839,7 +1857,8 @@ function onImportFile(file) {
 function init() {
   main = $('#main');
   PAGES.recipes = $('#page-recipes');
-  PAGES.kitchen = $('#page-kitchen');
+  PAGES.plan = $('#page-plan');
+  PAGES.shop = $('#page-shop');
   PAGES.settings = $('#page-settings');
   PAGES.recipe = $('#page-recipe');
   PAGES.edit = $('#page-edit');
@@ -1849,12 +1868,11 @@ function init() {
   state.view = RLStore.getPrefs().view;
 
   document.addEventListener('click', function (e) {
-    /* The rail on desktop and the bottom bar on a phone are the same three
+    /* The rail on desktop and the bottom bar on a phone are the same four
        buttons, so one handler covers both. */
     var tab = e.target.closest('.tabs button[data-tab]');
     if (tab) {
-      var name = tab.getAttribute('data-tab');
-      go(name === 'kitchen' ? 'kitchen/' + state.kitchenTab : name);
+      go(tab.getAttribute('data-tab'));
       return;
     }
     handleClick(e);
@@ -1878,7 +1896,7 @@ function init() {
     shop.extras.push({ id: RLStore.uid('x'), text: text });
     RLStore.setShop(shop);
     input.value = '';
-    renderKitchen();
+    redrawKitchen();
     updateCounts();
     var again = $('#extra');
     if (again) again.focus();
