@@ -40,8 +40,13 @@ takes it full screen with the ingredient column pinned.
   time, rating or how often you have made it.
 - **Adding** — a structured editor, or paste in a block from anywhere. A paste
   is pulled apart into ingredients and steps, and each step is given a first
-  guess at what it consumes, which you then correct. A page's JSON-LD is read
-  directly when you paste that instead.
+  guess at what it consumes, which you then correct.
+- **Pasting a web page** — copy a recipe page, or its source, and paste the
+  lot. It is read the way a scraper reads one: every JSON-LD block first, then
+  microdata, then the words on the page with the site's furniture (jump links,
+  share buttons, the 1x/2x/3x scaler, nutrition tables) left behind. A link on
+  its own cannot be read, because a browser will not let this page fetch
+  another site.
 - **Scaling** — servings up and down, with quantities re-rendered as kitchen
   fractions (metric stays decimal). A line that could not be parsed is passed
   through untouched rather than mangled.
@@ -49,7 +54,8 @@ takes it full screen with the ingredient column pinned.
   step needs as a checklist, timers read out of the step text ("simmer 20
   minutes"), and the screen kept awake.
 - **Kitchen** — a week planner, and a shopping list that merges duplicate
-  ingredients across recipes and groups them by aisle.
+  ingredients across recipes and groups them by aisle. Planning from a recipe
+  offers the next fortnight, or a calendar for any date beyond it.
 - **Settings** — dark or light, default view, export and import, auto-save to
   a file, and the storage health readout.
 

@@ -19,7 +19,7 @@ var HEAD_STEP = /^(directions?|instructions?|method|steps?|preparation|to make|p
 var HEAD_NOTE = /^(notes?|tips?|to serve|variations?)\b[:\s]*$/i;
 var META_SERVES = /^(serves|servings|yield|makes)\b[:\s]*(.+)$/i;
 var META_TIME = /^(prep(?:aration)?\s*time|cook(?:ing)?\s*time|total\s*time|bake\s*time)\b[:\s]*(.+)$/i;
-var BULLET = /^[\s]*(?:[-*•▪·]|\d+[.)])\s+/;
+var BULLET = /^[\s]*(?:[-*•▪·\u25a2\u2610\u2611\u2751]|\d+[.)])\s+/;
 
 /* Verbs that open an instruction. A line beginning with one of these is a
    step even if it also starts with a number ("2 minutes before serving..."
@@ -154,11 +154,11 @@ function parseBlock(text, seed) {
   }
 
   recipe.ingredients = ingLines.map(function (l) {
-    var p = RLUnits.parseIngredient(l);
+    var p = RLUnits.parseIngredient(cleanIngredient(l) || l);
     p.id = RLStore.uid('i');
     return p;
-  });
-  recipe.steps = splitSteps(stepLines).map(function (t) {
+  }).filter(function (p) { return p.raw; });
+  recipe.steps = splitSteps(stepLines.map(cleanInstruction)).map(function (t) {
     return { id: RLStore.uid('s'), text: t, inputs: [] };
   });
   if (noteLines.length) recipe.notes = (recipe.notes ? recipe.notes + '\n' : '') + noteLines.join('\n');
@@ -174,8 +174,15 @@ function splitSteps(lines) {
   var out = [];
   lines.forEach(function (l) {
     /* Short lines are left alone: "Cook 5 minutes. Serve." is one step, and
-       breaking it would only make the grid busier without saying more. */
-    if (l.length < 80) { out.push(l); return; }
+       breaking it would only make the grid busier without saying more.
+
+       Three sentences or more is a different animal: that is a whole method
+       handed over as one string, which is how a great many pages write
+       recipeInstructions. Left whole it becomes one enormous cook-mode card
+       and one enormous row in the grid, with nowhere to hang an ingredient
+       and no timer to start, so length is not the only reason to split. */
+    var sentences = (l.match(/[.!?](?:\s|$)/g) || []).length;
+    if (l.length < 80 && sentences < 3) { out.push(l); return; }
     /* Split after sentence punctuation. Done by planting a marker rather
        than with a lookbehind, which older Safari cannot even parse. */
     var parts = l.replace(/([.!?])\s+(?=[A-Z])/g, '$1<|>').split('<|>');
@@ -233,11 +240,37 @@ function autoLink(recipe) {
    Pasting a page's source, or a schema.org blob, is common enough to be
    worth handling; it is the only shape that arrives already structured. */
 function parseJsonLd(text) {
-  var data = null;
-  try { data = JSON.parse(text); } catch (e) { return null; }
+  var data = tryJson(text);
+  if (!data) return null;
   var node = findRecipeNode(data);
-  if (!node) return null;
+  return node ? recipeFromNode(node) : null;
+}
 
+/* JSON.parse, then JSON.parse again with entities undone. Some publishing
+   systems emit &quot; inside the ld+json block, which is not valid JSON and
+   is not decoded for us either, because a <script> is raw text as far as the
+   HTML parser is concerned. */
+function tryJson(text) {
+  try { return JSON.parse(text); } catch (e) { /* fall through */ }
+  try { return JSON.parse(decodeEntities(text)); } catch (e2) { return null; }
+}
+
+var ENTITIES = { amp: '&', quot: '"', apos: "'", lt: '<', gt: '>', nbsp: ' ', ndash: '-', mdash: '-', hellip: '...' };
+function decodeEntities(t) {
+  return String(t).replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, function (whole, body) {
+    if (body.charAt(0) === '#') {
+      var n = (body.charAt(1) === 'x' || body.charAt(1) === 'X')
+        ? parseInt(body.slice(2), 16) : parseInt(body.slice(1), 10);
+      return isNaN(n) ? whole : String.fromCharCode(n);
+    }
+    var k = body.toLowerCase();
+    return Object.prototype.hasOwnProperty.call(ENTITIES, k) ? ENTITIES[k] : whole;
+  });
+}
+
+/* A schema.org Recipe node, however it arrived: a ld+json block, one of
+   several ld+json blocks, or microdata attributes read off the page. */
+function recipeFromNode(node) {
   var r = RLStore.blankRecipe();
   r.title = String(node.name || 'Untitled recipe');
   r.blurb = String(node.description || '').slice(0, 400);
@@ -257,16 +290,39 @@ function parseJsonLd(text) {
       if (t && r.tags.indexOf(t) === -1 && r.tags.length < 8) r.tags.push(t);
     });
   });
-  (node.recipeIngredient || node.ingredients || []).forEach(function (l) {
-    var p = RLUnits.parseIngredient(String(l));
+  [].concat(node.recipeIngredient || node.ingredients || []).forEach(function (l) {
+    var line = cleanIngredient(String(l));
+    if (!line) return;
+    var p = RLUnits.parseIngredient(line);
     p.id = RLStore.uid('i');
     r.ingredients.push(p);
   });
   flattenInstructions(node.recipeInstructions).forEach(function (t) {
-    splitSteps([t]).forEach(function (s) { r.steps.push({ id: RLStore.uid('s'), text: s, inputs: [] }); });
+    var text = cleanInstruction(t);
+    if (!text) return;
+    splitSteps([text]).forEach(function (s) { r.steps.push({ id: RLStore.uid('s'), text: s, inputs: [] }); });
   });
+  if (!r.ingredients.length && !r.steps.length) return null;
   autoLink(r);
   return r;
+}
+
+/* Recipe-plugin furniture that rides along with the text: the checkbox
+   glyphs WordPress plugins put in front of every ingredient, and the 1x/2x/3x
+   scaler that ends up inside the line when a page is copied whole. */
+function cleanIngredient(line) {
+  return String(line)
+    .replace(/^[\s▢☐☑❑▫▪]+/, '')
+    .replace(/\s*[123]x\s*/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function cleanInstruction(text) {
+  return String(text)
+    .replace(/^\s*step\s*\d+\s*[:.)\-]?\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function findRecipeNode(data) {
@@ -304,19 +360,204 @@ function isoMinutes(iso) {
   return mins || null;
 }
 
+/* ---------- a whole web page ----------
+   There is no fetching here and there cannot be. A browser will not let this
+   page read someone else's, and recipe sites do not send the header that
+   would allow it. What it can do is read a page you hand it: copy the page,
+   or its source, and paste. Everything below is what a scraper would have
+   done with the response anyway.
+
+   In order of how much they can be trusted: ld+json, then microdata, then
+   the words on the page. */
+
+function looksLikeHtml(s) {
+  return /<\/(?:html|body|div|p|ul|ol|li|span|h[1-6]|article|section|table)\s*>/i.test(s) ||
+         /<(?:html|body|script|meta|div)[\s>]/i.test(s);
+}
+
+function parseHtml(markup) {
+  if (!global.DOMParser) return null;
+  /* text/html neither runs script nor fetches anything the document refers
+     to, so this stays string handling from beginning to end. */
+  try {
+    var doc = new global.DOMParser().parseFromString(markup, 'text/html');
+    return (doc && doc.body) ? doc : null;
+  } catch (e) { return null; }
+}
+
+/* Every ld+json block, not the first one. A recipe page routinely carries
+   four or five: the site, the breadcrumbs, the organisation, an article, and
+   then the recipe. Reading only the first one found a BreadcrumbList,
+   concluded the page held no recipe, and fell back to guessing at markup. */
+function recipeFromLdBlocks(doc) {
+  var blocks = doc.querySelectorAll('script[type="application/ld+json"]'), i, data, node, r;
+  for (i = 0; i < blocks.length; i++) {
+    data = tryJson(blocks[i].textContent || '');
+    if (!data) continue;
+    node = findRecipeNode(data);
+    if (!node) continue;
+    r = recipeFromNode(node);
+    if (r) return r;
+  }
+  return null;
+}
+
+/* The older convention, still all over the web: schema.org spelled out in
+   attributes rather than in a script tag. Read into the same node shape, so
+   there is one route from schema.org to a recipe rather than two. */
+function recipeFromMicrodata(doc) {
+  var scope = doc.querySelector('[itemtype*="schema.org/Recipe"]');
+  if (!scope) return null;
+
+  function value(el) {
+    if (!el) return '';
+    var c = el.getAttribute && el.getAttribute('content');
+    if (c) return c;
+    if (el.tagName === 'IMG') return el.getAttribute('src') || '';
+    if (el.tagName === 'TIME') return el.getAttribute('datetime') || el.textContent;
+    return el.textContent || '';
+  }
+  function one(name) { return value(scope.querySelector('[itemprop="' + name + '"]')); }
+  function all(name) {
+    return [].map.call(scope.querySelectorAll('[itemprop="' + name + '"]'), value)
+             .map(function (x) { return String(x).replace(/\s+/g, ' ').trim(); })
+             .filter(Boolean);
+  }
+
+  var node = {
+    '@type': 'Recipe',
+    name: one('name') || one('headline'),
+    description: one('description'),
+    image: one('image'),
+    recipeYield: one('recipeYield'),
+    prepTime: one('prepTime'),
+    cookTime: one('cookTime'),
+    totalTime: one('totalTime'),
+    recipeIngredient: all('recipeIngredient').concat(all('ingredients')),
+    recipeInstructions: all('recipeInstructions').concat(all('instructions'))
+  };
+  if (!node.recipeIngredient.length && !node.recipeInstructions.length) return null;
+  return recipeFromNode(node);
+}
+
+/* Page furniture that is not the recipe. Whole lines only, and only ones
+   that are unmistakably chrome: this filters what a web page wraps a recipe
+   in, and must never filter what somebody typed. */
+var PAGE_JUNK = new RegExp('^(?:' + [
+  'jump to( the)? (recipe|video|comments?)', 'print( recipe| this)?', 'pin (it|this|recipe)',
+  'share( this)?', 'save( recipe| this)?', 'rate (this )?recipe',
+  'leave a (comment|reply|review|rating)', 'advertisement', 'sponsored( content)?',
+  'skip to (main )?content', 'continue to content', 'you may also like',
+  'related (recipes|posts)', 'more recipes', 'reader interactions',
+  'subscribe', 'sign up', 'newsletter', 'follow (us|me)', 'search', 'menu', 'home',
+  'cook mode', 'prevent your screen from going dark', 'equipment',
+  'nutrition( facts| information)?', '[123]x', 'us customary', 'metric',
+  'add to (shopping list|collection)', 'watch', 'comments?',
+  'instagram', 'facebook', 'pinterest', 'email', 'all rights reserved.*',
+  '\\d+(\\.\\d+)?\\s*(from\\s*\\d+\\s*)?(votes?|reviews?|ratings?|stars?)',
+  '\\d+\\s*(comments?|shares?)'
+].join('|') + ')\\s*[:.]?$', 'i');
+
+/* A nutrition table reads as a list of ingredients unless it is recognised.
+   Deliberately narrow: the whole line has to be a nutrient and a number, so
+   "Sugar: 200g" in somebody's own notes is left alone. Sugar and salt are
+   not on the list at all, being far likelier to be food than a footnote. */
+var NUTRITION = new RegExp('^(?:calories|carbohydrates?|protein|cholesterol|sodium|potassium|' +
+  'fib(?:er|re)|(?:saturated |unsaturated |trans |poly|mono)?fat|vitamin [a-z0-9]+|calcium|iron)' +
+  '\\s*:?\\s*[\\d.,]+\\s*(?:k?cal|kj|g|mg|mcg|iu|%)?$', 'i');
+
+/* Plugin layouts put a label on one line and its value on the next. Joined
+   up they are something parseBlock already reads; left apart the value
+   drifts off and becomes an ingredient called "15 minutes". */
+var META_LABEL = /^(prep(?:aration)?\s*time|cook(?:ing)?\s*time|total\s*time|bake\s*time|serves|servings|yield|makes)\s*:?$/i;
+
+function tidyPageLines(text) {
+  var lines = String(text).replace(/\r/g, '').split('\n');
+  var out = [], i, line, j, val;
+  for (i = 0; i < lines.length; i++) {
+    /* \u00a0 spelled out: a literal non-breaking space here is invisible
+       in the source and one tidy-up away from being deleted by accident. */
+    line = lines[i].replace(/\u00a0/g, ' ').replace(/[ \t]+/g, ' ').trim();
+    if (!line) continue;
+    if (PAGE_JUNK.test(line) || NUTRITION.test(line)) continue;
+    if (META_LABEL.test(line)) {
+      j = i + 1;
+      while (j < lines.length && !lines[j].trim()) j++;
+      if (j < lines.length) {
+        val = lines[j].trim();
+        if (!META_LABEL.test(val) && val.length < 40) {
+          out.push(line.replace(/:$/, '') + ': ' + val);
+          i = j;
+          continue;
+        }
+      }
+      continue;
+    }
+    /* A heading repeated by the layout, once for the page and once for the
+       card, should not become two ingredients. */
+    if (out.length && out[out.length - 1] === line) continue;
+    out.push(line);
+  }
+  return out.join('\n');
+}
+
+/* The words on the page, with the furniture taken off first. Block elements
+   become line breaks so the page's own lines survive into the parser. */
+function htmlToText(doc) {
+  var junk = doc.querySelectorAll(
+    'script,style,noscript,nav,header,footer,aside,form,button,select,textarea,svg,iframe,template,figcaption');
+  [].forEach.call(junk, function (el) { if (el.parentNode) el.parentNode.removeChild(el); });
+
+  /* Prefer the part of the page that says it is the recipe. */
+  var root = doc.querySelector('[itemtype*="schema.org/Recipe"]') ||
+             doc.querySelector('.wprm-recipe, .tasty-recipes, .recipe, #recipe') ||
+             doc.querySelector('article, main') || doc.body;
+
+  [].forEach.call(root.querySelectorAll('br'), function (br) {
+    if (br.parentNode) br.parentNode.replaceChild(doc.createTextNode('\n'), br);
+  });
+  [].forEach.call(
+    root.querySelectorAll('p,div,li,h1,h2,h3,h4,h5,h6,tr,section,article,dd,dt,blockquote'),
+    function (el) { el.appendChild(doc.createTextNode('\n')); });
+
+  return tidyPageLines(root.textContent || '');
+}
+
+function stripTags(markup) {
+  return decodeEntities(
+    String(markup)
+      .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
+      .replace(/<br[^>]*>/gi, '\n')
+      .replace(/<\/(p|div|li|h[1-6]|tr|section)>/gi, '\n')
+      .replace(/<[^>]+>/g, ' '));
+}
+
 /* Try the structured route first, because it is exact, then the text one. */
 function parseAny(text, seed) {
   var trimmed = String(text).trim();
+
   if (/^[[{]/.test(trimmed)) {
     var fromLd = parseJsonLd(trimmed);
     if (fromLd) return fromLd;
   }
-  var script = trimmed.match(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/i);
-  if (script) {
-    var fromTag = parseJsonLd(script[1]);
-    if (fromTag) return fromTag;
+
+  if (looksLikeHtml(trimmed)) {
+    var doc = parseHtml(trimmed);
+    if (doc) return recipeFromLdBlocks(doc) || recipeFromMicrodata(doc) || parseBlock(htmlToText(doc), seed);
+
+    /* No DOMParser to lean on: sweep the script tags by hand, and failing
+       that read the markup with its tags knocked out. */
+    var tags = trimmed.match(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi) || [];
+    for (var i = 0; i < tags.length; i++) {
+      var got = parseJsonLd(tags[i].replace(/^<script[^>]*>/i, '').replace(/<\/script>$/i, ''));
+      if (got) return got;
+    }
+    return parseBlock(tidyPageLines(stripTags(trimmed)), seed);
   }
-  return parseBlock(trimmed, seed);
+
+  /* Plain text, but a paste box is where a copied page lands, so the same
+     furniture arrives with the tags already stripped off by the clipboard. */
+  return parseBlock(tidyPageLines(trimmed), seed);
 }
 
 /* ---------- timers ----------
@@ -346,6 +587,7 @@ function fmtClock(secs) {
 
 global.RLParse = {
   parseAny: parseAny, parseBlock: parseBlock, parseJsonLd: parseJsonLd,
+  htmlToText: htmlToText, tidyPageLines: tidyPageLines, decodeEntities: decodeEntities,
   autoLink: autoLink, timerFor: timerFor, fmtClock: fmtClock,
   minutesIn: minutesIn, splitSteps: splitSteps
 };
