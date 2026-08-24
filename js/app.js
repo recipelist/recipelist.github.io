@@ -88,6 +88,11 @@ function route() {
 
   state.route = next;
 
+  /* Both of these cover the whole screen and neither is a route of its own,
+     so navigating has to take them down. Without this the full-screen grid
+     survived a back gesture and sat over the next page with the body still
+     scroll-locked, which reads as the app having frozen. */
+  closeGridFull();
   if (next.name === 'cook') { openCook(next.arg); return; }
   closeCook();
 
@@ -262,6 +267,21 @@ function emptyState(title, body, actions) {
 
 /* ---------------- one recipe ---------------- */
 
+/* The scale currently in force, which belongs to one recipe and must not be
+   inherited by the next. Cook mode used to read `state.servings` directly,
+   so opening a recipe, scaling it, then jumping straight to #cook/<other>
+   cooked the second recipe at the first one's servings: a 6-serving chili
+   read out at 2 because the oats before it had been scaled to 2. Every
+   reader goes through here now, and the scale resets whenever the recipe
+   under it changes. */
+function servingsFor(r) {
+  if (state.lastId !== r.id || state.servings == null) {
+    state.lastId = r.id;
+    state.servings = r.servings;
+  }
+  return state.servings;
+}
+
 function renderRecipe(id) {
   var r = RLStore.get(id);
   if (!r) {
@@ -269,7 +289,7 @@ function renderRecipe(id) {
       '<button class="btn" data-act="back">Back to recipes</button>');
     return;
   }
-  if (state.servings == null || state.lastId !== id) { state.servings = r.servings; state.lastId = id; }
+  state.servings = servingsFor(r);
   state.factor = r.servings ? (state.servings / r.servings) : 1;
 
   var prefView = RLStore.getPrefs().view;
@@ -603,6 +623,10 @@ function openPaste() {
     if (b.getAttribute('data-act') === 'do-paste') {
       var text = box.value.trim();
       if (!text) { toast('Nothing to read there.', 'bad'); return; }
+      /* A paste always lands in a *new* recipe, so doing this from inside the
+         editor throws away whatever is unsaved there. Everywhere else that
+         loses work asks first; this used to be the one place that did not. */
+      if (state.dirty && !confirm('This makes a new recipe from what you paste. Your unsaved changes to the one you are editing will be lost. Carry on?')) return;
       var parsed;
       try { parsed = RLParse.parseAny(text); }
       catch (err) { toast('That could not be read: ' + err.message, 'bad'); return; }
@@ -871,7 +895,7 @@ function releaseWake() {
 function drawCook() {
   var r = RLStore.get(cook.id);
   if (!r) { closeCook(); return; }
-  var factor = r.servings ? ((state.servings || r.servings) / r.servings) : 1;
+  var factor = r.servings ? (servingsFor(r) / r.servings) : 1;
   var n = cook.seq.length;
   var done = cook.i >= n;
   var cur = done ? null : cook.seq[cook.i];
@@ -895,7 +919,7 @@ function drawCook() {
     var timer = RLParse.timerFor(cur.step.text);
     if (timer) {
       html += '<button class="btn accent timer-start" data-act="timer" data-seconds="' + timer.seconds +
-        '" data-label="' + esc(cur.step.text.slice(0, 30)) + '">Start a ' + esc(timer.text) + ' timer</button>';
+        '" data-label="' + esc(cur.step.text.slice(0, 30)) + '">Start a timer for ' + esc(timer.text) + '</button>';
     }
     if (cur.ingredients.length) {
       html += '<ul class="cook-ings">' + cur.ingredients.map(function (ing) {
@@ -1162,7 +1186,7 @@ function handleClick(e) {
     }
     case 'print': closeMenus(); window.print(); break;
     case 'del': {
-      var delId = (state.route.name === 'edit' ? state.route.arg : state.route.arg);
+      var delId = state.route.arg;
       var victim = RLStore.get(delId);
       if (!victim) break;
       if (!confirm('Delete "' + victim.title + '"? This cannot be undone, and it is only stored here.')) break;
@@ -1417,6 +1441,7 @@ function weekToList() {
 function openGridFull() {
   var r = RLStore.get(state.route.arg);
   if (!r) return;
+  closeGridFull();          /* one overlay at a time; a second tap replaces */
   var wrap = document.createElement('div');
   wrap.className = 'grid-full';
   wrap.innerHTML = '<div class="gf-head"><span>' + esc(r.title) + '</span>' +
@@ -1427,10 +1452,13 @@ function openGridFull() {
   document.body.classList.add('cooking');
   state.gridFull = true;
 }
+/* Removes every overlay, not just the first: the old version took one node
+   at a time, so a repeated tap left a stack that outlived its own close
+   button. The scroll lock is shared with cook mode, so it is only released
+   when cook mode is not the one holding it. */
 function closeGridFull() {
-  var el = $('.grid-full');
-  if (el) el.remove();
-  document.body.classList.remove('cooking');
+  $$('.grid-full').forEach(function (el) { el.remove(); });
+  if (!cookEl || cookEl.hidden) document.body.classList.remove('cooking');
   state.gridFull = false;
 }
 
