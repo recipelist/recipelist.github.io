@@ -1419,33 +1419,102 @@ function togglePick(sid, targetId) {
   redrawSteps();
 }
 
+/* Planning from a recipe. The next fortnight is the common case and stays
+   one tap, but the fortnight was also the only case: anything further out
+   could not be planned from here at all. A calendar sits behind a button
+   for the rest of the year, and remembers nothing, so reopening the picker
+   always starts back at the quick list. */
 function planPickerForRecipe(r) {
   var wrap = document.createElement('div');
   wrap.className = 'modal-scrim';
-  var start = weekStart(0);
-  var days = [];
-  for (var i = 0; i < 14; i++) { var d = new Date(start); d.setDate(d.getDate() + i); days.push(d); }
-  wrap.innerHTML = '<div class="modal" role="dialog" aria-label="Choose a day">' +
-    '<h2>Plan ' + esc(r.title) + '</h2>' +
-    '<div class="pick-list">' + days.map(function (d) {
+  var mode = 'soon';
+  var cursor = new Date();
+  cursor.setDate(1);
+  cursor.setHours(0, 0, 0, 0);
+
+  draw();
+  document.body.appendChild(wrap);
+
+  wrap.addEventListener('click', function (e) {
+    if (e.target === wrap || e.target.closest('[data-act="close-modal"]')) { wrap.remove(); return; }
+    var b = e.target.closest('[data-act]');
+    var act = b && b.getAttribute('data-act');
+    if (act === 'cal-open') { mode = 'cal'; draw(); return; }
+    if (act === 'cal-soon') { mode = 'soon'; draw(); return; }
+    if (act === 'cal-month') {
+      cursor.setMonth(cursor.getMonth() + Number(b.getAttribute('data-d')));
+      draw();
+      return;
+    }
+    var row = e.target.closest('[data-day]');
+    if (!row || row.disabled) return;
+    plan(row.getAttribute('data-day'));
+  });
+
+  function plan(k) {
+    var p = RLStore.getPlan();
+    p.days[k] = p.days[k] || [];
+    p.days[k].push({ recipe: r.id, servings: state.servings || r.servings });
+    RLStore.setPlan(p);
+    wrap.remove();
+    toast('Planned for ' + prettyDay(k) + '.');
+  }
+
+  function draw() {
+    wrap.innerHTML = '<div class="modal" role="dialog" aria-label="Choose a day">' +
+      '<h2>Plan ' + esc(r.title) + '</h2>' +
+      (mode === 'soon' ? soonHTML() : calHTML()) +
+      '<div class="modal-foot">' +
+        (mode === 'soon'
+          ? '<button class="btn" data-act="cal-open">Another date&hellip;</button>'
+          : '<button class="btn" data-act="cal-soon">Back to the next fortnight</button>') +
+        '<button class="btn" data-act="close-modal">Cancel</button>' +
+      '</div></div>';
+  }
+
+  function soonHTML() {
+    var start = weekStart(0), days = [], i;
+    for (i = 0; i < 14; i++) { var d = new Date(start); d.setDate(d.getDate() + i); days.push(d); }
+    return '<div class="pick-list">' + days.map(function (d) {
       var k = dayKey(d);
       return '<button class="pick-row" data-day="' + k + '"><strong>' + DAY_NAMES[(d.getDay() + 6) % 7] + '</strong>' +
         '<span>' + MONTHS[d.getMonth()] + ' ' + d.getDate() + '</span></button>';
-    }).join('') + '</div>' +
-    '<div class="modal-foot"><button class="btn" data-act="close-modal">Cancel</button></div></div>';
-  document.body.appendChild(wrap);
-  wrap.addEventListener('click', function (e) {
-    if (e.target === wrap || e.target.closest('[data-act="close-modal"]')) { wrap.remove(); return; }
-    var row = e.target.closest('.pick-row');
-    if (!row) return;
-    var k = row.getAttribute('data-day');
+    }).join('') + '</div>';
+  }
+
+  function calHTML() {
     var plan = RLStore.getPlan();
-    plan.days[k] = plan.days[k] || [];
-    plan.days[k].push({ recipe: r.id, servings: state.servings || r.servings });
-    RLStore.setPlan(plan);
-    wrap.remove();
-    toast('Planned for ' + prettyDay(k) + '.');
-  });
+    var todayK = dayKey(new Date());
+    var year = cursor.getFullYear(), month = cursor.getMonth();
+    var first = new Date(year, month, 1);
+    var lead = (first.getDay() + 6) % 7;                 /* Monday = 0 */
+    var len = new Date(year, month + 1, 0).getDate();
+    var cells = '', i, d, k, n, cls;
+
+    for (i = 0; i < lead; i++) cells += '<span class="cal-day cal-blank"></span>';
+    for (i = 1; i <= len; i++) {
+      d = new Date(year, month, i);
+      k = dayKey(d);
+      n = (plan.days[k] || []).length;
+      cls = 'cal-day' + (k === todayK ? ' today' : '') + (k < todayK ? ' past' : '');
+      cells += '<button class="' + cls + '" data-day="' + k + '" ' +
+        'aria-label="' + DAY_NAMES[(d.getDay() + 6) % 7] + ' ' + MONTHS[month] + ' ' + i + '">' +
+        i + (n ? '<span class="cal-dot" title="' + n + ' already planned"></span>' : '') + '</button>';
+    }
+
+    return '<div class="cal-head">' +
+        '<button class="btn small" data-act="cal-month" data-d="-1" aria-label="Previous month">&larr;</button>' +
+        '<span class="cal-label">' + MONTHS[month] + ' ' + year + '</span>' +
+        '<button class="btn small" data-act="cal-month" data-d="1" aria-label="Next month">&rarr;</button>' +
+      '</div>' +
+      '<div class="cal">' +
+        ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(function (x) {
+          return '<span class="cal-dow" aria-hidden="true">' + x + '</span>';
+        }).join('') +
+        cells +
+      '</div>' +
+      '<p class="hint">A dot means something is already planned that day.</p>';
+  }
 }
 
 function weekToList() {
