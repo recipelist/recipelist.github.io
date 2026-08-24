@@ -620,9 +620,13 @@ function openPaste() {
   wrap.className = 'modal-scrim';
   wrap.innerHTML = '<div class="modal" role="dialog" aria-label="Paste a recipe">' +
     '<h2>Paste a recipe in</h2>' +
-    '<p class="hint">Anything goes: a block copied off a page, your own notes, or a page\'s JSON-LD. ' +
-    'It is pulled apart into ingredients and steps, and each step is given a first guess at what it uses. ' +
+    '<p class="hint">Anything goes: a whole recipe page copied off the web, that page\'s source, ' +
+    'your own notes, or a page\'s JSON-LD. A page is read the way a scraper reads one, structured ' +
+    'data first, and the site\'s own furniture is left behind. It is pulled apart into ingredients ' +
+    'and steps, and each step is given a first guess at what it uses. ' +
     'Nothing is saved until you look it over.</p>' +
+    '<p class="hint">A link on its own cannot be read: a browser will not let this page fetch ' +
+    'another site. Open the page, select all, copy, and paste that here instead.</p>' +
     '<textarea id="paste-box" rows="12" placeholder="Chocolate chip cookies&#10;Serves 24&#10;&#10;Ingredients&#10;2 cups flour&#10;1 tsp salt&#10;&#10;Method&#10;Whisk the dry ingredients together.&#10;Bake 12 minutes."></textarea>' +
     '<div class="modal-foot">' +
       '<button class="btn accent" data-act="do-paste">Pull it apart</button>' +
@@ -639,6 +643,13 @@ function openPaste() {
     if (b.getAttribute('data-act') === 'do-paste') {
       var text = box.value.trim();
       if (!text) { toast('Nothing to read there.', 'bad'); return; }
+      /* A bare link is the one thing people will certainly try and the one
+         thing that cannot work, so say why rather than shrugging and making
+         a recipe called "https". */
+      if (/^https?:\/\/\S+$/i.test(text)) {
+        toast('That is a link, and this page is not allowed to fetch another site. Open it, select all, copy, then paste that.', 'bad');
+        return;
+      }
       /* A paste always lands in a *new* recipe, so doing this from inside the
          editor throws away whatever is unsaved there. Everywhere else that
          loses work asks first; this used to be the one place that did not. */
