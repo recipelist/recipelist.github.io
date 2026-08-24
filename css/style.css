@@ -156,6 +156,20 @@ svg.filled { fill: currentColor; }
 }
 .hint { color: var(--muted); font-size: .85rem; margin: .3rem 0 0; }
 .crumb { margin-bottom: .7rem; }
+
+/* The crumb's chevron, and the only .linky that carries an icon. Centring it
+   on the flex line put it on the baseline, which is where the bottom of the
+   text sits rather than its middle: the chevron hung 3.5px below the middle
+   of "Recipes" and its point dropped past the tail of the p.
+
+   So sit it on the baseline and lift it by half the x-height, which is what
+   vertical-align: middle would do if this were not a flex row. Both terms
+   come from the font rather than from a measurement of one screen, so it
+   holds wherever the crumb is used, and --ic keeps the lift tied to the
+   icon's actual height. Scoped to .crumb on purpose: every other .linky is
+   text only, and centring is right for those. */
+.crumb .linky { align-items: baseline; }
+.crumb .linky .ic { position: relative; top: calc(var(--ic) / 2 - 0.5ex); }
 .result-note { margin: .9rem 0 0; font-size: .82rem; color: var(--muted); }
 
 /* ── Controls ───────────────────────────────────────────────────────── */
@@ -180,13 +194,14 @@ svg.filled { fill: currentColor; }
 .btn[disabled]:hover { border-color: var(--line); color: var(--ink); }
 
 .linky {
+  --ic: 14px;
   border: 0; background: none; padding: 0;
   color: var(--accent); font: inherit; font-size: .9rem;
   cursor: pointer; text-decoration: underline; text-underline-offset: 3px;
   display: inline-flex; align-items: center; gap: .25rem;
 }
 .linky:hover { text-decoration: none; }
-.linky .ic { width: 14px; height: 14px; }
+.linky .ic { width: var(--ic); height: var(--ic); }
 .linky.tiny { font-size: .78rem; }
 
 .step-btn {
