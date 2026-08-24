@@ -4,6 +4,15 @@
    a light brown as the primary. Dark is the default and light is opt-in, so
    every colour is defined twice and nothing is left to the browser to guess.
 
+   Light is derived from dark rather than invented beside it. Dark's ladder
+   climbs away from a near-black page towards the ink; light's climbs away
+   from a near-white page towards a warm tint, the same number of rungs. The
+   surface tints are literal lightenings of dark's #d2a679, and the wash is
+   that colour itself at low alpha, so the two themes are recognisably one
+   palette. Only the two colours that carry text have to move further: on
+   white a light brown cannot be read, so the primary deepens to #8a5a2b and
+   the ink flips to a warm near-black.
+
    The shell, the type scale and the spacing are the sibling
    thetricktionary.github.io's, deliberately: a 224px sticky rail flush to
    the left edge on desktop, a fixed bottom bar on phones (<=700px), panels
@@ -11,26 +20,26 @@
    rather than sprawling. Only the colours here are this project's own. */
 
 :root, .light {
-  --bg: #ffffff;
-  --panel: #faf6f1;
-  --card: #ffffff;
-  --ink: #2b2318;
-  --muted: #6f6559;
-  --line: #e3d9cc;
-  --line-soft: #efe8de;
-  --accent: #8a5a2b;
+  --bg: #fdfaf7;              /* white, with just enough warmth to not be cold */
+  --panel: #f8f0e8;
+  --card: #ffffff;            /* controls float clear of the panels they sit on */
+  --ink: #2b2118;
+  --muted: #716256;
+  --line: #e4d4c3;
+  --line-soft: #f0e6db;
+  --accent: #8a5a2b;          /* dark's #d2a679, taken down far enough to read */
   --accent-deep: #6b4420;
-  --accent-ink: #ffffff;
-  --accent-wash: #f6ede2;
-  --tab-bg: #f1e9df;
-  --tab-hover: #ece2d5;
-  --row-hover: #faf5ee;
-  --good: #3f7d4e;
-  --bad: #a63d29;
-  --shadow: rgba(60, 45, 30, .09);
-  --panel-90: rgba(250, 246, 241, .93);
-  --grid-op: #f3e9dd;
-  --grid-op-ink: #4a382a;
+  --accent-ink: #fffaf4;
+  --accent-wash: rgba(210, 166, 121, .18);   /* the dark accent, barely there */
+  --tab-bg: #f2e4d6;
+  --tab-hover: #f6ece2;
+  --row-hover: #f4e8dc;
+  --good: #2f743e;
+  --bad: #a34329;
+  --shadow: rgba(74, 52, 30, .10);
+  --panel-90: rgba(248, 240, 232, .94);
+  --grid-op: #f1e3d5;
+  --grid-op-ink: #4c3924;
 }
 
 .dark {
