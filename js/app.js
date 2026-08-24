@@ -845,6 +845,8 @@ function renderSettings() {
       : 'Eight recipes to look around with, including the coffee cake the grid format is usually shown with.') + '</p>' +
   '</section>' +
 
+  autosavePanelHTML() +
+
   '<section class="panel"><h2>Storage</h2>' +
     '<p class="stat ' + (health.ok ? 'ok' : 'bad') + '">' +
       (health.ok ? 'Saving works in this browser.' : 'Saving is failing: ' + esc(health.error)) + '</p>' +
@@ -1315,6 +1317,13 @@ function handleClick(e) {
       break;
     }
     case 'import': $('#importfile').click(); break;
+    case 'as-pick': autosavePick(); break;
+    case 'as-now': autosaveWrite(true); break;
+    case 'as-reconnect': autosaveReconnect(); break;
+    case 'as-stop':
+      if (!confirm('Stop writing to ' + autosave.name + '? The file stays where it is, it just stops being updated.')) break;
+      autosaveStop();
+      break;
 
     /* cook mode */
     case 'cookclose': go('r/' + cook.id); break;
@@ -1462,6 +1471,215 @@ function closeGridFull() {
   state.gridFull = false;
 }
 
+/* ---------------- auto-save to a file ----------------
+   The File System Access API hands back a handle to a file the user picked.
+   The handle is structured-cloneable, so it can live in IndexedDB and outlast
+   a reload, and Chrome can grant it permission for every visit. After one
+   dialog the collection writes itself to that file whenever anything changes.
+
+   Be honest about the limit: clearing site data takes the handle with it, the
+   same as everything else here. What it does not take is the file, which is
+   the whole point. Point it at a synced folder and there is a copy of every
+   recipe off this machine that survives the browser entirely.
+
+   Chromium desktop only. Firefox and every browser on iOS have no such API,
+   so the panel simply never appears there and manual export stays the way. */
+
+var IDB_NAME = 'recipelist';
+var IDB_STORE = 'kv';
+var IDB_HANDLE_KEY = 'autosave-handle';
+var AUTOSAVE_DEBOUNCE = 1500;
+
+var autosave = { handle: null, name: '', at: null, error: '', perm: 'granted', timer: null, busy: false, again: false, forgetful: false };
+
+function autosaveSupported() {
+  return !!(window.showSaveFilePicker && window.indexedDB);
+}
+
+function idb() {
+  return new Promise(function (resolve, reject) {
+    var req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = function () {
+      if (!req.result.objectStoreNames.contains(IDB_STORE)) req.result.createObjectStore(IDB_STORE);
+    };
+    req.onsuccess = function () { resolve(req.result); };
+    req.onerror = function () { reject(req.error); };
+  });
+}
+
+function idbDo(mode, fn) {
+  return idb().then(function (db) {
+    return new Promise(function (resolve, reject) {
+      var tx = db.transaction(IDB_STORE, mode);
+      var req = fn(tx.objectStore(IDB_STORE));
+      tx.oncomplete = function () { resolve(req && req.result); };
+      tx.onerror = function () { reject(tx.error); };
+    });
+  });
+}
+
+function autosaveLoad() {
+  if (!autosaveSupported()) return Promise.resolve();
+  return idbDo('readonly', function (st) { return st.get(IDB_HANDLE_KEY); })
+    .then(function (h) {
+      if (!h) return;
+      autosave.handle = h;
+      autosave.name = h.name || 'a file';
+      /* queryPermission never prompts. Asking needs a user gesture, so what
+         it reports is recorded and acted on from a button rather than nagged
+         about on load.
+
+         'prompt' is the ordinary case, not a fault: browsers hand out
+         file-write permission for one visit, so a refresh drops back to
+         asking unless the grant was made permanent in the browser's own
+         dialog. 'denied' is the real problem. They read very differently and
+         must not share a message. */
+      if (!h.queryPermission) return;
+      return h.queryPermission({ mode: 'readwrite' }).then(function (stateName) {
+        autosave.perm = stateName;
+      });
+    })
+    .catch(function () { /* no handle, or storage refused: manual export stands */ })
+    .then(renderAutosave);
+}
+
+function autosavePick() {
+  if (!autosaveSupported()) return;
+  window.showSaveFilePicker({
+    /* Named for the site rather than just the app, so a file sitting in a
+       folder months later still says where it came from. */
+    suggestedName: 'recipelist-github-io.json',
+    types: [{ description: 'Recipe List backup', accept: { 'application/json': ['.json'] } }]
+  }).then(function (h) {
+    autosave.handle = h;
+    autosave.name = h.name || 'a file';
+    autosave.error = '';
+    autosave.perm = 'granted';
+    /* Remembering the handle is the nicety; writing the file is the job. If
+       IndexedDB refuses, which a private window will, auto-saving still works
+       for this visit and simply has to be set up again next time. Letting the
+       failure through would mean picking a file and having nothing written to
+       it, which is the one outcome the user would not forgive. */
+    return idbDo('readwrite', function (st) { return st.put(h, IDB_HANDLE_KEY); })
+      .catch(function () { autosave.forgetful = true; })
+      .then(function () { return autosaveWrite(true); });
+  }).catch(function (err) {
+    /* Cancelling the dialog is not a failure. */
+    if (err && err.name === 'AbortError') return;
+    autosave.error = (err && err.message) || 'could not use that file';
+    renderAutosave();
+  });
+}
+
+function autosaveStop() {
+  autosave.handle = null; autosave.name = ''; autosave.at = null;
+  autosave.error = ''; autosave.perm = 'granted';
+  clearTimeout(autosave.timer);
+  idbDo('readwrite', function (st) { return st.delete(IDB_HANDLE_KEY); })
+    .catch(function () {})
+    .then(renderAutosave);
+}
+
+/* Writes the same payload the export button produces, so the file is an
+   ordinary backup that Import already understands. */
+function autosaveWrite(loud) {
+  if (!autosave.handle) return Promise.resolve();
+  /* A write is already running. Queue one behind it rather than dropping this
+     call, or the file would sit a change behind until the next edit happened
+     to come along. */
+  if (autosave.busy) { autosave.again = true; return Promise.resolve(); }
+  autosave.busy = true;
+  var h = autosave.handle;
+  return Promise.resolve(h.queryPermission ? h.queryPermission({ mode: 'readwrite' }) : 'granted')
+    .then(function (stateName) {
+      autosave.perm = stateName;
+      if (stateName !== 'granted') throw new Error('permission');
+      return h.createWritable();
+    }).then(function (w) {
+      return w.write(JSON.stringify(RLStore.exportData(), null, 2)).then(function () { return w.close(); });
+    }).then(function () {
+      autosave.at = new Date();
+      autosave.error = '';
+      if (loud) toast('Auto-saving to ' + autosave.name);
+    }).catch(function (err) {
+      if (!autosave.error) autosave.error = (err && err.message) || 'write failed';
+    }).then(function () {
+      autosave.busy = false;
+      if (autosave.again) { autosave.again = false; return autosaveWrite(false); }
+      renderAutosave();
+    });
+}
+
+/* Called on every stored change. Debounced, because one edit to a recipe can
+   touch the collection, the planner and the list in the same breath. */
+function autosaveSchedule() {
+  if (!autosave.handle) return;
+  clearTimeout(autosave.timer);
+  autosave.timer = setTimeout(function () { autosaveWrite(false); }, AUTOSAVE_DEBOUNCE);
+}
+
+function autosaveReconnect() {
+  if (!autosave.handle || !autosave.handle.requestPermission) return;
+  autosave.handle.requestPermission({ mode: 'readwrite' }).then(function (stateName) {
+    autosave.perm = stateName;
+    if (stateName === 'granted') { autosave.error = ''; return autosaveWrite(true); }
+    renderAutosave();
+  }).catch(function () { renderAutosave(); });
+}
+
+/* The panel is drawn as part of Settings, which redraws wholesale, so this
+   just redraws Settings when it happens to be the page on screen. */
+function renderAutosave() {
+  if (state.route.name === 'settings') renderSettings();
+}
+
+function autosavePanelHTML() {
+  if (!autosaveSupported()) {
+    return '<section class="panel"><h2>Auto-save to a file</h2>' +
+      '<p>This browser cannot write to a file you choose, so the Export button above is the way to get a copy out. ' +
+      'Chrome, Edge and other Chromium browsers on a desktop can do it; Firefox and everything on iOS cannot.</p></section>';
+  }
+  var on = !!autosave.handle;
+  var html = '<section class="panel"><h2>Auto-save to a file</h2>' +
+    '<p>Pick a file once and every recipe, the planner and the shopping list are written to it whenever anything changes. ' +
+    'Point it at a synced folder and you get an off-machine copy for free, which another device can import from.</p>' +
+    '<div class="btn-row">' +
+      '<button class="btn" data-act="as-pick">' + (on ? 'Choose a different file' : 'Choose a file') + '</button>' +
+      (on ? '<button class="btn" data-act="as-now">Save now</button>' : '') +
+      (on ? '<button class="btn ghost danger" data-act="as-stop">Stop auto-saving</button>' : '') +
+    '</div>';
+
+  if (!on) {
+    html += '<p class="hint">Not set up. Nothing is written anywhere until you pick a file.</p>';
+  } else if (autosave.perm === 'prompt') {
+    html += '<p class="hint"><strong>Paused.</strong> Browsers allow writing to a file for one visit at a time, ' +
+      'so this asks again after a refresh. <button class="linky" data-act="as-reconnect">Resume</button><br>' +
+      'Choosing <strong>Allow on every visit</strong> in the browser prompt stops it asking again.</p>';
+  } else if (autosave.perm === 'denied') {
+    html += '<p class="stat bad">This browser is blocking writes to ' + esc(autosave.name) + '.</p>' +
+      '<p class="hint">Nothing is being saved to it. Allow file editing for this site in the browser settings, ' +
+      'or pick the file again. <button class="linky" data-act="as-reconnect">Try again</button></p>';
+  } else if (autosave.error) {
+    html += '<p class="stat bad">' + esc(autosave.name) + ' could not be written: ' + esc(autosave.error) + '</p>';
+  } else {
+    html += '<p class="hint">Saving to <strong>' + esc(autosave.name) + '</strong>' +
+      (autosave.at ? ', last written ' + esc(fmtWhen(autosave.at)) : ', not written yet') + '.' +
+      (autosave.forgetful
+        ? ' This browser would not remember the file, so it will need choosing again next visit. A private window does that.'
+        : '') + '</p>';
+  }
+  return html + '</section>';
+}
+
+function fmtWhen(d) {
+  var secs = Math.round((Date.now() - d.getTime()) / 1000);
+  if (secs < 10) return 'just now';
+  if (secs < 60) return secs + ' seconds ago';
+  var mins = Math.round(secs / 60);
+  if (mins < 60) return mins + (mins === 1 ? ' minute ago' : ' minutes ago');
+  return 'at ' + d.toLocaleTimeString();
+}
+
 /* ---------------- misc ---------------- */
 
 function debounce(fn, ms) {
@@ -1568,6 +1786,10 @@ function init() {
     }
   });
 
+  /* Picks up a file chosen on an earlier visit, and reports what permission
+     the browser is willing to give it now. */
+  autosaveLoad();
+
   window.addEventListener('hashchange', route);
   window.addEventListener('beforeunload', function (e) {
     if (!state.dirty) return;
@@ -1582,7 +1804,8 @@ global.RLApp = {
   toast: toast,
   onStorageChange: function (ok) {
     if (!ok) toast('That did not save. Check Settings.', 'bad');
-  }
+  },
+  onDataChanged: function () { autosaveSchedule(); }
 };
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

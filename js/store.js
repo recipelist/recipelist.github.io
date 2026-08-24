@@ -167,10 +167,19 @@ function all() {
   return recipes;
 }
 
-function persist() {
-  var ok = saveJSON(K.recipes, all());
+/* Everything that changes stored data ends here, so anything watching the
+   collection hears about it once, in one place. Auto-save is the reason it
+   exists: a writer hooked only to `persist()` would miss the planner, the
+   shopping list and the preferences, and would go on cheerfully saving a
+   file that no longer matched what is on screen. */
+function changed(ok) {
   if (global.RLApp && global.RLApp.onStorageChange) global.RLApp.onStorageChange(ok);
+  if (global.RLApp && global.RLApp.onDataChanged) global.RLApp.onDataChanged();
   return ok;
+}
+
+function persist() {
+  return changed(saveJSON(K.recipes, all()));
 }
 
 function get(id) {
@@ -241,7 +250,7 @@ function getPlan() {
   if (!p.days || typeof p.days !== 'object') p.days = {};
   return p;
 }
-function setPlan(p) { return saveJSON(K.plan, p); }
+function setPlan(p) { return changed(saveJSON(K.plan, p)); }
 
 /* { recipes: [{recipe, servings}], extras: [{id, text, done}], done: {key:1} } */
 function getShop() {
@@ -252,7 +261,7 @@ function getShop() {
   if (!s.done || typeof s.done !== 'object') s.done = {};
   return s;
 }
-function setShop(s) { return saveJSON(K.shop, s); }
+function setShop(s) { return changed(saveJSON(K.shop, s)); }
 
 /* ---------- preferences ---------- */
 
@@ -264,7 +273,7 @@ function getPrefs() {
   for (k in DEFAULT_PREFS) out[k] = (p && p[k] !== undefined) ? p[k] : DEFAULT_PREFS[k];
   return out;
 }
-function setPrefs(p) { return saveJSON(K.prefs, p); }
+function setPrefs(p) { return changed(saveJSON(K.prefs, p)); }
 function setPref(key, val) { var p = getPrefs(); p[key] = val; return setPrefs(p); }
 
 function getTheme() { return rawGet(K.theme) === 'light' ? 'light' : 'dark'; }

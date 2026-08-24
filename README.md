@@ -50,8 +50,8 @@ takes it full screen with the ingredient column pinned.
   minutes"), and the screen kept awake.
 - **Kitchen** — a week planner, and a shopping list that merges duplicate
   ingredients across recipes and groups them by aisle.
-- **Settings** — dark or light, default view, export and import, and the
-  storage health readout.
+- **Settings** — dark or light, default view, export and import, auto-save to
+  a file, and the storage health readout.
 
 Dark mode is the default. Everything you enter stays in this browser.
 
@@ -92,6 +92,20 @@ Three guards sit behind that:
 Import **merges**: same recipe keeps whichever side was updated later, and a
 recipe the incoming file has never heard of is left alone. Restoring an old
 backup can add recipes but can never take one away.
+
+### Auto-save to a file
+
+Settings has an **Auto-save to a file** panel. Pick a file once and the whole
+collection, the planner and the shopping list are written to it whenever
+anything changes. Point it at a synced folder and there is a copy of every
+recipe off this machine that survives the browser entirely. The file is the
+same shape Export writes, so Import already understands it.
+
+Two honest limits. It needs the File System Access API, so it is Chromium on
+a desktop only; the panel says so plainly on Firefox and on iOS, where manual
+export stays the way. And browsers grant file-write permission for one visit
+at a time, so after a refresh the panel shows **Paused** with a Resume button
+until you pick *Allow on every visit* in the browser's own prompt.
 
 ## Licence
 
