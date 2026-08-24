@@ -517,10 +517,16 @@ table.rgrid { border-collapse: collapse; width: 100%; min-width: 520px; font-siz
 .cook[hidden] { display: none; }
 body.cooking { overflow: hidden; }
 .cook-head { display: flex; align-items: center; gap: .7rem; }
+/* An icon rather than a x character: the glyph's ink sits about 2.5px high
+   and 2px left of its own box, by the font's own metrics, and those metrics
+   differ per platform, so no amount of centring the box centres what you
+   actually see. Drawn geometry is centred everywhere. */
 .cook-x {
   border: 1px solid var(--line); border-radius: 7px; background: var(--card); color: var(--ink);
-  width: 32px; height: 32px; font-size: 1.2rem; line-height: 1; cursor: pointer; font-family: inherit;
+  width: 32px; height: 32px; padding: 0; cursor: pointer; font-family: inherit;
+  display: grid; place-items: center;
 }
+.cook-x .ic { width: 16px; height: 16px; }
 .cook-x:hover { border-color: var(--accent); color: var(--accent); }
 .cook-title { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cook-count { color: var(--muted); font-size: .82rem; font-variant-numeric: tabular-nums; }

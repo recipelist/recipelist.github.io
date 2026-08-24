@@ -538,12 +538,20 @@ function bindEditorInputs() {
      text has not changed, so ticking survives an edit elsewhere. */
   on('#f-ings', 'blur', function () {
     var lines = this.value.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+    /* A queue per line of text, not one entry per line of text. Two identical
+       lines are two ingredients with two ids, and the second has to find its
+       own id here: matching both to the first one left the second rebuilt as
+       a stranger on every blur, and every step pointing at it quietly let go.
+       The '#' keeps a line reading "constructor" off Object.prototype. */
     var oldByRaw = {};
-    r.ingredients.forEach(function (i) { if (!oldByRaw[i.raw]) oldByRaw[i.raw] = i; });
-    var used = {};
+    r.ingredients.forEach(function (i) {
+      var k = '#' + i.raw;
+      if (!oldByRaw[k]) oldByRaw[k] = [];
+      oldByRaw[k].push(i);
+    });
     r.ingredients = lines.map(function (l) {
-      var prev = oldByRaw[l];
-      if (prev && !used[prev.id]) { used[prev.id] = 1; return prev; }
+      var q = oldByRaw['#' + l];
+      if (q && q.length) return q.shift();
       var p = RLUnits.parseIngredient(l);
       p.id = RLStore.uid('i');
       return p;
@@ -903,7 +911,7 @@ function drawCook() {
   var cur = done ? null : cook.seq[cook.i];
 
   var html = '<div class="cook-head">' +
-    '<button class="cook-x" data-act="cookclose" aria-label="Leave cook mode">&times;</button>' +
+    '<button class="cook-x" data-act="cookclose" aria-label="Leave cook mode"><svg viewBox="0 0 24 24" class="ic"><path d="M6 6l12 12M18 6L6 18"/></svg></button>' +
     '<div class="cook-title">' + esc(r.title) + '</div>' +
     '<div class="cook-count">' + (done ? 'done' : (cook.i + 1) + ' of ' + n) + '</div>' +
   '</div>' +
@@ -1120,7 +1128,11 @@ function handleClick(e) {
 
   switch (act) {
     case 'open': go('r/' + id); break;
-    case 'back': history.length > 1 ? history.back() : go('recipes'); break;
+    /* Both buttons wearing this act say "Recipes", so they go to the recipe
+       list. history.back() went wherever you happened to come from, which
+       after arriving from the planner, the shopping list or a bookmark was
+       not the recipe list at all. */
+    case 'back': go('recipes'); break;
     case 'new': state.editor = null; state.dirty = false; go('new'); break;
     case 'paste': openPaste(); break;
     case 'demo':
@@ -1454,7 +1466,7 @@ function openGridFull() {
   var wrap = document.createElement('div');
   wrap.className = 'grid-full';
   wrap.innerHTML = '<div class="gf-head"><span>' + esc(r.title) + '</span>' +
-    '<button class="cook-x" data-act="gridfullclose" aria-label="Close">&times;</button></div>' +
+    '<button class="cook-x" data-act="gridfullclose" aria-label="Close"><svg viewBox="0 0 24 24" class="ic"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>' +
     '<p class="gf-hint">Swipe sideways; the ingredients column stays put.</p>' +
     RLGrid.renderGrid(r, state.factor, { timers: false });
   document.body.appendChild(wrap);
