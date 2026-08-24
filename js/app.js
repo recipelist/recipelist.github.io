@@ -406,6 +406,7 @@ function renderEditor(id) {
     '</div></header>' +
 
   '<div class="form">' +
+    '<div class="form-main">' +
     field('Title', '<input id="f-title" type="text" value="' + esc(r.title) + '" placeholder="What is it called?">') +
     field('One line about it', '<input id="f-blurb" type="text" value="' + esc(r.blurb) + '" placeholder="Optional">') +
     '<div class="form-row">' +
@@ -423,16 +424,23 @@ function renderEditor(id) {
       esc((r.ingredients || []).map(function (i) { return i.raw; }).join('\n')) + '</textarea>', '',
       'One per line. Quantities are read off the front so the scaler and the shopping list can do their work; anything unreadable is kept exactly as typed.') +
 
+    '</div>' +
+
+    '<div class="form-steps">' +
     '<div class="field"><label class="lbl">Steps</label>' +
       '<div class="steps-editor" id="steps-editor">' + stepsEditorHTML(r) + '</div>' +
       '<button class="btn small" data-act="addstep">Add a step</button>' +
       '<p class="hint">Tick what each step uses and the grid draws itself. A step can take ingredients, the result of an earlier step, or both. Nothing can be used twice.</p>' +
     '</div>' +
+    '</div>' +
 
+    '<div class="form-more">' +
     field('Photo URL', '<input id="f-photo" type="url" value="' + esc(r.photo) + '" placeholder="https://...">', '',
       'Optional, and only ever linked, never copied into this browser.') +
     field('Source', '<input id="f-source" type="text" value="' + esc(r.source) + '" placeholder="A book, a person, a link">') +
     field('Notes', '<textarea id="f-notes" rows="3" placeholder="Oven temperature, what to serve it with, what went wrong last time">' + esc(r.notes) + '</textarea>') +
+
+    '</div>' +
 
     '<div class="form-foot">' +
       '<button class="btn accent" data-act="save">Save recipe</button>' +
@@ -612,9 +620,13 @@ function openPaste() {
   wrap.className = 'modal-scrim';
   wrap.innerHTML = '<div class="modal" role="dialog" aria-label="Paste a recipe">' +
     '<h2>Paste a recipe in</h2>' +
-    '<p class="hint">Anything goes: a block copied off a page, your own notes, or a page\'s JSON-LD. ' +
-    'It is pulled apart into ingredients and steps, and each step is given a first guess at what it uses. ' +
+    '<p class="hint">Anything goes: a whole recipe page copied off the web, that page\'s source, ' +
+    'your own notes, or a page\'s JSON-LD. A page is read the way a scraper reads one, structured ' +
+    'data first, and the site\'s own furniture is left behind. It is pulled apart into ingredients ' +
+    'and steps, and each step is given a first guess at what it uses. ' +
     'Nothing is saved until you look it over.</p>' +
+    '<p class="hint">A link on its own cannot be read: a browser will not let this page fetch ' +
+    'another site. Open the page, select all, copy, and paste that here instead.</p>' +
     '<textarea id="paste-box" rows="12" placeholder="Chocolate chip cookies&#10;Serves 24&#10;&#10;Ingredients&#10;2 cups flour&#10;1 tsp salt&#10;&#10;Method&#10;Whisk the dry ingredients together.&#10;Bake 12 minutes."></textarea>' +
     '<div class="modal-foot">' +
       '<button class="btn accent" data-act="do-paste">Pull it apart</button>' +
@@ -631,6 +643,13 @@ function openPaste() {
     if (b.getAttribute('data-act') === 'do-paste') {
       var text = box.value.trim();
       if (!text) { toast('Nothing to read there.', 'bad'); return; }
+      /* A bare link is the one thing people will certainly try and the one
+         thing that cannot work, so say why rather than shrugging and making
+         a recipe called "https". */
+      if (/^https?:\/\/\S+$/i.test(text)) {
+        toast('That is a link, and this page is not allowed to fetch another site. Open it, select all, copy, then paste that.', 'bad');
+        return;
+      }
       /* A paste always lands in a *new* recipe, so doing this from inside the
          editor throws away whatever is unsaved there. Everywhere else that
          loses work asks first; this used to be the one place that did not. */
@@ -1411,33 +1430,102 @@ function togglePick(sid, targetId) {
   redrawSteps();
 }
 
+/* Planning from a recipe. The next fortnight is the common case and stays
+   one tap, but the fortnight was also the only case: anything further out
+   could not be planned from here at all. A calendar sits behind a button
+   for the rest of the year, and remembers nothing, so reopening the picker
+   always starts back at the quick list. */
 function planPickerForRecipe(r) {
   var wrap = document.createElement('div');
   wrap.className = 'modal-scrim';
-  var start = weekStart(0);
-  var days = [];
-  for (var i = 0; i < 14; i++) { var d = new Date(start); d.setDate(d.getDate() + i); days.push(d); }
-  wrap.innerHTML = '<div class="modal" role="dialog" aria-label="Choose a day">' +
-    '<h2>Plan ' + esc(r.title) + '</h2>' +
-    '<div class="pick-list">' + days.map(function (d) {
+  var mode = 'soon';
+  var cursor = new Date();
+  cursor.setDate(1);
+  cursor.setHours(0, 0, 0, 0);
+
+  draw();
+  document.body.appendChild(wrap);
+
+  wrap.addEventListener('click', function (e) {
+    if (e.target === wrap || e.target.closest('[data-act="close-modal"]')) { wrap.remove(); return; }
+    var b = e.target.closest('[data-act]');
+    var act = b && b.getAttribute('data-act');
+    if (act === 'cal-open') { mode = 'cal'; draw(); return; }
+    if (act === 'cal-soon') { mode = 'soon'; draw(); return; }
+    if (act === 'cal-month') {
+      cursor.setMonth(cursor.getMonth() + Number(b.getAttribute('data-d')));
+      draw();
+      return;
+    }
+    var row = e.target.closest('[data-day]');
+    if (!row || row.disabled) return;
+    plan(row.getAttribute('data-day'));
+  });
+
+  function plan(k) {
+    var p = RLStore.getPlan();
+    p.days[k] = p.days[k] || [];
+    p.days[k].push({ recipe: r.id, servings: state.servings || r.servings });
+    RLStore.setPlan(p);
+    wrap.remove();
+    toast('Planned for ' + prettyDay(k) + '.');
+  }
+
+  function draw() {
+    wrap.innerHTML = '<div class="modal" role="dialog" aria-label="Choose a day">' +
+      '<h2>Plan ' + esc(r.title) + '</h2>' +
+      (mode === 'soon' ? soonHTML() : calHTML()) +
+      '<div class="modal-foot">' +
+        (mode === 'soon'
+          ? '<button class="btn" data-act="cal-open">Another date&hellip;</button>'
+          : '<button class="btn" data-act="cal-soon">Back to the next fortnight</button>') +
+        '<button class="btn" data-act="close-modal">Cancel</button>' +
+      '</div></div>';
+  }
+
+  function soonHTML() {
+    var start = weekStart(0), days = [], i;
+    for (i = 0; i < 14; i++) { var d = new Date(start); d.setDate(d.getDate() + i); days.push(d); }
+    return '<div class="pick-list">' + days.map(function (d) {
       var k = dayKey(d);
       return '<button class="pick-row" data-day="' + k + '"><strong>' + DAY_NAMES[(d.getDay() + 6) % 7] + '</strong>' +
         '<span>' + MONTHS[d.getMonth()] + ' ' + d.getDate() + '</span></button>';
-    }).join('') + '</div>' +
-    '<div class="modal-foot"><button class="btn" data-act="close-modal">Cancel</button></div></div>';
-  document.body.appendChild(wrap);
-  wrap.addEventListener('click', function (e) {
-    if (e.target === wrap || e.target.closest('[data-act="close-modal"]')) { wrap.remove(); return; }
-    var row = e.target.closest('.pick-row');
-    if (!row) return;
-    var k = row.getAttribute('data-day');
+    }).join('') + '</div>';
+  }
+
+  function calHTML() {
     var plan = RLStore.getPlan();
-    plan.days[k] = plan.days[k] || [];
-    plan.days[k].push({ recipe: r.id, servings: state.servings || r.servings });
-    RLStore.setPlan(plan);
-    wrap.remove();
-    toast('Planned for ' + prettyDay(k) + '.');
-  });
+    var todayK = dayKey(new Date());
+    var year = cursor.getFullYear(), month = cursor.getMonth();
+    var first = new Date(year, month, 1);
+    var lead = (first.getDay() + 6) % 7;                 /* Monday = 0 */
+    var len = new Date(year, month + 1, 0).getDate();
+    var cells = '', i, d, k, n, cls;
+
+    for (i = 0; i < lead; i++) cells += '<span class="cal-day cal-blank"></span>';
+    for (i = 1; i <= len; i++) {
+      d = new Date(year, month, i);
+      k = dayKey(d);
+      n = (plan.days[k] || []).length;
+      cls = 'cal-day' + (k === todayK ? ' today' : '') + (k < todayK ? ' past' : '');
+      cells += '<button class="' + cls + '" data-day="' + k + '" ' +
+        'aria-label="' + DAY_NAMES[(d.getDay() + 6) % 7] + ' ' + MONTHS[month] + ' ' + i + '">' +
+        i + (n ? '<span class="cal-dot" title="' + n + ' already planned"></span>' : '') + '</button>';
+    }
+
+    return '<div class="cal-head">' +
+        '<button class="btn small" data-act="cal-month" data-d="-1" aria-label="Previous month">&larr;</button>' +
+        '<span class="cal-label">' + MONTHS[month] + ' ' + year + '</span>' +
+        '<button class="btn small" data-act="cal-month" data-d="1" aria-label="Next month">&rarr;</button>' +
+      '</div>' +
+      '<div class="cal">' +
+        ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(function (x) {
+          return '<span class="cal-dow" aria-hidden="true">' + x + '</span>';
+        }).join('') +
+        cells +
+      '</div>' +
+      '<p class="hint">A dot means something is already planned that day.</p>';
+  }
 }
 
 function weekToList() {
