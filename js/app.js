@@ -478,8 +478,8 @@ function stepsEditorHTML(r) {
     return '<div class="step-row" data-step="' + esc(s.id) + '">' +
       '<div class="step-line">' +
         '<span class="step-n">' + (n + 1) + '</span>' +
-        '<input class="step-text" type="text" data-step="' + esc(s.id) + '" value="' + esc(s.text) +
-          '" placeholder="cream / fold in / bake 40 minutes">' +
+        '<textarea class="step-text" rows="1" data-step="' + esc(s.id) +
+          '" placeholder="cream / fold in / bake 40 minutes">' + esc(s.text) + '</textarea>' +
         '<button class="step-btn" data-act="stepup" data-step="' + esc(s.id) + '" title="Move up" aria-label="Move up">&uarr;</button>' +
         '<button class="step-btn" data-act="stepdown" data-step="' + esc(s.id) + '" title="Move down" aria-label="Move down">&darr;</button>' +
         '<button class="step-btn danger" data-act="stepdel" data-step="' + esc(s.id) + '" title="Remove" aria-label="Remove">&times;</button>' +
@@ -574,11 +574,44 @@ function bindEditorInputs() {
     redrawSteps();
   });
 
+  bindStepText(root);
+}
+
+/* A step's text is a textarea so a long instruction wraps and shows itself
+   rather than scrolling sideways inside a one-line box. A textarea has no
+   intrinsic height though, so it is measured and set on every change: back
+   to auto first, or scrollHeight only ever reports the height it already
+   has and the field can grow but never shrink again. */
+function growStep(el) {
+  if (!el) return;
+  el.style.height = 'auto';
+  /* scrollHeight counts the content and its padding but not the border,
+     while box-sizing: border-box means the height set here has to cover the
+     border too. Handing scrollHeight straight over leaves the box a border
+     short of its own text and clips the last line by a hair. */
+  var cs = getComputedStyle(el);
+  var border = (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.borderBottomWidth) || 0);
+  el.style.height = (el.scrollHeight + border) + 'px';
+}
+
+function bindStepText(root) {
   $$('.step-text', root).forEach(function (inp) {
+    growStep(inp);
     inp.addEventListener('input', function () {
-      var id = this.getAttribute('data-step');
-      r.steps.forEach(function (s) { if (s.id === id) s.text = inp.value; });
+      var id = inp.getAttribute('data-step');
+      var list = (state.editor && state.editor.steps) || [];
+      list.forEach(function (s) { if (s.id === id) s.text = inp.value; });
       state.dirty = true;
+      growStep(inp);
+    });
+    /* Enter did nothing in the input this replaces, and a step is one
+       instruction that happens to wrap rather than several lines. Every view
+       renders the text as HTML, where a newline collapses to a space, so a
+       stored break would be invisible everywhere but in the editor. Shift is
+       no exception: an escape hatch to type something that cannot be seen
+       afterwards is not a kindness. */
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') e.preventDefault();
     });
   });
 }
@@ -587,13 +620,7 @@ function redrawSteps() {
   var host = $('#steps-editor', PAGES.edit);
   if (!host) return;
   host.innerHTML = stepsEditorHTML(state.editor);
-  $$('.step-text', host).forEach(function (inp) {
-    inp.addEventListener('input', function () {
-      var id = this.getAttribute('data-step');
-      state.editor.steps.forEach(function (s) { if (s.id === id) s.text = inp.value; });
-      state.dirty = true;
-    });
-  });
+  bindStepText(host);
 }
 
 function commitIngredientsField() {

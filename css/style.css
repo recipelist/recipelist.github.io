@@ -205,7 +205,8 @@ svg.filled { fill: currentColor; }
 .linky.tiny { font-size: .78rem; }
 
 .step-btn {
-  width: 26px; height: 26px; flex-shrink: 0;
+  --h: 26px;
+  width: var(--h); height: var(--h); flex-shrink: 0;
   border: 1px solid var(--line); border-radius: 6px;
   background: var(--card); color: var(--muted);
   font-family: inherit; font-size: .9rem; line-height: 1; cursor: pointer;
@@ -440,13 +441,37 @@ table.rgrid { border-collapse: collapse; width: 100%; min-width: 520px; font-siz
 
 .steps-editor { margin-bottom: .5rem; }
 .step-row { border: 1px solid var(--line); border-radius: 8px; padding: .55rem; margin-bottom: .4rem; background: var(--panel); }
-.step-line { display: flex; align-items: center; gap: .35rem; }
+/* Top, not centre: the text field grows downwards as an instruction wraps,
+   and centring would leave the number and the buttons drifting to the middle
+   of a tall box instead of staying with the line they number.
+
+   --row1 is one row of that field, spelled out from the field's own border,
+   padding and line height rather than measured off a screen, and each
+   control is then centred inside it by half the difference. That is what
+   align-items: center used to give on a single-line field, so a one-line
+   step looks exactly as it did, and a step that has grown keeps its number
+   beside its first line instead of halfway down. */
+.step-line {
+  /* One variable for the field's type size, because two things depend on it:
+     the field itself, and --row1 below. */
+  --tf: .9rem;
+  --row1: calc(2px + .8rem + var(--tf) * 1.4);
+  display: flex; align-items: flex-start; gap: .35rem;
+}
+.step-line .step-n { margin-top: calc((var(--row1) - var(--h)) / 2); }
+.step-line .step-btn { margin-top: calc((var(--row1) - var(--h)) / 2); }
 .step-n {
-  flex: 0 0 22px; height: 22px; display: grid; place-items: center;
+  --h: 22px;
+  flex: 0 0 var(--h); height: var(--h); display: grid; place-items: center;
   border-radius: 5px; background: var(--accent-wash); color: var(--accent);
   font-size: .75rem; font-weight: 600;
 }
-.step-text { flex: 1; min-width: 0; padding: .4rem .6rem; font-size: .9rem; background: var(--card); }
+.step-text {
+  flex: 1; min-width: 0; padding: .4rem .6rem; font-size: var(--tf); background: var(--card);
+  /* Height is set from the content in JS, so neither a scrollbar nor a drag
+     handle has anything to offer here. */
+  resize: none; overflow: hidden; line-height: 1.4;
+}
 .step-uses { margin-top: .4rem; font-size: .8rem; color: var(--muted); display: flex; gap: .4rem; flex-wrap: wrap; align-items: baseline; }
 .step-uses .linky { font-size: .8rem; }
 .uses-text { min-width: 0; }
@@ -693,6 +718,13 @@ body.cooking { overflow: hidden; }
 
   /* 16px inputs stop iOS Safari auto-zooming on focus */
   input[type=search], input[type=text], input[type=url], input[type=number], textarea { font-size: 16px; }
+  /* The step field has to be named. It used to be an input[type=text], which
+     outranks .step-text and so picked the 16px up from the line above; as a
+     textarea the bare element selector loses to that class and it would sit
+     at .9rem, which is exactly what makes iOS zoom. Setting the variable
+     rather than the property keeps --row1 in step, so the number and the
+     buttons stay level with the first line at this size too. */
+  .step-line { --tf: 16px; }
 
   .toast { left: .7rem; right: .7rem; transform: none; text-align: center;
            bottom: calc(5rem + env(safe-area-inset-bottom, 0px)); max-width: none; }
