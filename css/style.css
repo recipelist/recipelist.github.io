@@ -318,7 +318,10 @@ button.tag:hover { background: var(--accent); color: var(--accent-ink); }
   display: flex; flex-wrap: wrap; gap: .4rem;
   margin-bottom: .9rem; padding-bottom: .9rem; border-bottom: 1px solid var(--line);
 }
-.menu-wrap { position: relative; }
+/* A flex row, so the button inside stretches to the same height as the
+   buttons beside it. Without this the wrapper stretches and the button
+   does not, leaving More 4px short of every one of its siblings. */
+.menu-wrap { position: relative; display: flex; }
 .menu {
   position: absolute; right: 0; top: calc(100% + .3rem); z-index: 30;
   min-width: 160px; padding: .25rem;
@@ -617,7 +620,9 @@ body.cooking { overflow: hidden; }
   .listview { grid-template-columns: 1fr; gap: 1rem; }
   .week { grid-template-columns: 1fr; }
   .toolbar { flex-wrap: wrap; }
-  .actionbar .btn { flex: 1 1 auto; }
+  /* The wrapper grows with the buttons it sits among, or More alone stays
+     at icon width while the rest of the row spreads out. */
+  .actionbar .btn, .actionbar .menu-wrap { flex: 1 1 auto; }
 
   /* 16px inputs stop iOS Safari auto-zooming on focus */
   input[type=search], input[type=text], input[type=url], input[type=number], textarea { font-size: 16px; }
