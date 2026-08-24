@@ -920,6 +920,8 @@ function renderSettings() {
       : 'Eight recipes to look around with, including the coffee cake the grid format is usually shown with.') + '</p>' +
   '</section>' +
 
+  sharingPanelHTML() +
+
   autosavePanelHTML() +
 
   '<section class="panel"><h2>Storage</h2>' +
@@ -1394,6 +1396,8 @@ function handleClick(e) {
       break;
     }
     case 'import': $('#importfile').click(); break;
+    case 'share-send': openShare('send'); break;
+    case 'share-recv': openShare('receive'); break;
     case 'as-pick': autosavePick(); break;
     case 'as-now': autosaveWrite(true); break;
     case 'as-reconnect': autosaveReconnect(); break;
@@ -1614,6 +1618,211 @@ function closeGridFull() {
   $$('.grid-full').forEach(function (el) { el.remove(); });
   if (!cookEl || cookEl.hidden) document.body.classList.remove('cooking');
   state.gridFull = false;
+}
+
+/* ---------------- sharing, device to device ----------------
+   The panel and the two dialogs. Everything about the connection itself is
+   in share.js; this is only the part that asks a person to carry a code.
+
+   Why there is a code to carry at all: discovery is the one thing PairDrop
+   has that a page on GitHub Pages cannot have, because finding another
+   device means a server both devices can reach. The transfer afterwards
+   needs no server, so that is what this does. See the head of share.js. */
+
+var share = null;      /* the live exchange, so a second dialog cannot start one behind the first */
+
+function sharingPanelHTML() {
+  if (!RLShare.supported()) {
+    return '<section class="panel"><h2>Sharing</h2>' +
+      '<p>This browser has no WebRTC, so it cannot talk to another device directly. ' +
+      'Export a backup and import it on the other device instead.</p></section>';
+  }
+  return '<section class="panel"><h2>Sharing</h2>' +
+    '<p>Send every recipe straight to another device, browser to browser. Nothing goes through ' +
+    'a server on the way: the recipes travel directly between the two, and nothing about them is ' +
+    'stored anywhere else.</p>' +
+    '<p>The two devices cannot find each other on their own, which is what a service like PairDrop ' +
+    'keeps a server for. So you introduce them: carry one short code across and one back, using ' +
+    'whatever you already use to send yourself a line of text. After that the recipes go direct.</p>' +
+    '<div class="btn-row">' +
+      '<button class="btn accent" data-act="share-send">Send to another device</button>' +
+      '<button class="btn" data-act="share-recv">Receive from another device</button>' +
+    '</div>' +
+    '<p class="hint">Arriving recipes are merged, exactly as an imported backup is: same recipe keeps ' +
+    'whichever side is newer, and nothing you have is ever removed. Only pair with a device you own ' +
+    'or a person you trust.</p>' +
+  '</section>';
+}
+
+function openShare(mode) {
+  if (share) { share.close(); share = null; }
+
+  var wrap = document.createElement('div');
+  wrap.className = 'modal-scrim';
+  document.body.appendChild(wrap);
+
+  var sending = (mode === 'send');
+  var state2 = { step: 1, code: '', status: '', error: '', result: '', busy: false };
+
+  draw();
+  if (sending) beginSend(); else state2.step = 1;
+
+  wrap.addEventListener('click', function (e) {
+    if (e.target === wrap || e.target.closest('[data-act="close-modal"]')) return shut();
+    var b = e.target.closest('[data-act]');
+    if (!b) return;
+    var act = b.getAttribute('data-act');
+    if (act === 'share-copy') {
+      var box = $('#share-code', wrap);
+      box.select();
+      copyText(box.value).then(function () { toast('Code copied.'); });
+      return;
+    }
+    if (act === 'share-go') { advance(); return;
+    }
+  });
+
+  function shut() {
+    if (share) { share.close(); share = null; }
+    wrap.remove();
+  }
+
+  function fail(err) {
+    state2.busy = false;
+    state2.error = (err && err.message) || String(err);
+    draw();
+  }
+
+  function beginSend() {
+    share = RLShare.startSend(
+      function () { return JSON.stringify(RLStore.exportData()); },
+      { onstatus: function (t) { state2.status = t; draw(); },
+        onprogress: function (a, b) { state2.status = 'Sending ' + a + ' of ' + b + '…'; draw(); },
+        onerror: fail });
+    state2.status = 'Preparing…';
+    draw();
+    share.code().then(function (code) {
+      state2.code = code;
+      state2.status = '';
+      draw();
+    }).catch(fail);
+  }
+
+  /* The one button that moves the exchange along; what it does depends on
+     which side of it you are and how far you have got. */
+  function advance() {
+    var input = $('#share-in', wrap);
+    var value = input ? input.value.trim() : '';
+    if (!value) { toast('Paste the code from the other device first.', 'bad'); return; }
+    state2.busy = true; state2.error = ''; draw();
+
+    if (sending) {
+      share.reply(value).then(function (bytes) {
+        state2.busy = false;
+        state2.step = 3;
+        state2.result = 'Sent ' + RLStore.all().length + ' recipes (' + Math.round(bytes / 1024) + ' KB).';
+        draw();
+      }).catch(fail);
+      return;
+    }
+
+    /* Receiving: the invite goes in, the reply comes out, and the recipes
+       arrive whenever the other device gets round to sending them. */
+    share = RLShare.startReceive({
+      onstatus: function (t) { state2.status = t; draw(); },
+      onprogress: function (a, b) { state2.status = 'Receiving ' + a + (b ? ' of ' + b : '') + '…'; draw(); },
+      onerror: fail,
+      ondata: function (text) {
+        var data;
+        try { data = JSON.parse(text); }
+        catch (err) { return fail(new Error('What arrived could not be read.')); }
+        var res;
+        try { res = RLStore.importData(data, { withPlan: false }); }
+        catch (err2) { return fail(err2); }
+        state2.step = 3;
+        state2.status = '';
+        state2.result = 'Added ' + res.added + ', updated ' + res.updated + ', left alone ' + res.skipped + '.';
+        draw();
+        updateCounts();
+      }
+    });
+    share.offer(value).then(function (code) {
+      state2.busy = false;
+      state2.step = 2;
+      state2.code = code;
+      state2.status = 'Waiting for the recipes…';
+      draw();
+    }).catch(fail);
+  }
+
+  function codeBox(label, hint) {
+    return '<label class="lbl">' + esc(label) + '</label>' +
+      '<textarea id="share-code" rows="3" readonly onclick="this.select()">' + esc(state2.code) + '</textarea>' +
+      '<div class="btn-row"><button class="btn small" data-act="share-copy">Copy this code</button></div>' +
+      (hint ? '<p class="hint">' + hint + '</p>' : '');
+  }
+
+  function inputBox(label, hint, button) {
+    return '<label class="lbl">' + esc(label) + '</label>' +
+      '<textarea id="share-in" rows="3" placeholder="Paste the code here"></textarea>' +
+      '<div class="btn-row"><button class="btn accent" data-act="share-go"' +
+        (state2.busy ? ' disabled' : '') + '>' + esc(state2.busy ? 'Working…' : button) + '</button></div>' +
+      (hint ? '<p class="hint">' + hint + '</p>' : '');
+  }
+
+  function draw() {
+    var body;
+    if (state2.step === 3) {
+      body = '<p class="stat ok">' + esc(state2.result) + '</p>';
+    } else if (sending) {
+      body =
+        '<p class="hint"><strong>1.</strong> Send this code to the other device, then open ' +
+        'Settings there and choose <em>Receive</em>.</p>' +
+        (state2.code ? codeBox('Your invite code') : '<p class="hint">Preparing…</p>') +
+        '<p class="hint"><strong>2.</strong> It will give you a reply code. Paste it here.</p>' +
+        inputBox('Reply code', '', 'Connect and send');
+    } else if (state2.step === 1) {
+      body =
+        '<p class="hint"><strong>1.</strong> Paste the invite code from the device that is sending.</p>' +
+        inputBox('Invite code', '', 'Continue');
+    } else {
+      body =
+        '<p class="hint"><strong>2.</strong> Send this reply code back to the other device and paste ' +
+        'it there. Keep this open until the recipes arrive.</p>' +
+        codeBox('Your reply code');
+    }
+
+    wrap.innerHTML = '<div class="modal" role="dialog" aria-label="Share recipes">' +
+      '<h2>' + (sending ? 'Send to another device' : 'Receive from another device') + '</h2>' +
+      body +
+      (state2.status ? '<p class="hint">' + esc(state2.status) + '</p>' : '') +
+      (state2.error ? '<p class="stat bad">' + esc(state2.error) + '</p>' : '') +
+      '<div class="modal-foot"><button class="btn" data-act="close-modal">' +
+        (state2.step === 3 ? 'Done' : 'Cancel') + '</button></div>' +
+    '</div>';
+  }
+}
+
+/* navigator.clipboard is not there on an insecure origin, and this app is
+   perfectly usable over plain http on a home network. */
+function copyText(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text).catch(fallback);
+  }
+  return fallback();
+
+  function fallback() {
+    return new Promise(function (resolve) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;top:-1000px';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (e) {}
+      ta.remove();
+      resolve();
+    });
+  }
 }
 
 /* ---------------- auto-save to a file ----------------
