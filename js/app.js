@@ -406,6 +406,7 @@ function renderEditor(id) {
     '</div></header>' +
 
   '<div class="form">' +
+    '<div class="form-main">' +
     field('Title', '<input id="f-title" type="text" value="' + esc(r.title) + '" placeholder="What is it called?">') +
     field('One line about it', '<input id="f-blurb" type="text" value="' + esc(r.blurb) + '" placeholder="Optional">') +
     '<div class="form-row">' +
@@ -423,16 +424,23 @@ function renderEditor(id) {
       esc((r.ingredients || []).map(function (i) { return i.raw; }).join('\n')) + '</textarea>', '',
       'One per line. Quantities are read off the front so the scaler and the shopping list can do their work; anything unreadable is kept exactly as typed.') +
 
+    '</div>' +
+
+    '<div class="form-steps">' +
     '<div class="field"><label class="lbl">Steps</label>' +
       '<div class="steps-editor" id="steps-editor">' + stepsEditorHTML(r) + '</div>' +
       '<button class="btn small" data-act="addstep">Add a step</button>' +
       '<p class="hint">Tick what each step uses and the grid draws itself. A step can take ingredients, the result of an earlier step, or both. Nothing can be used twice.</p>' +
     '</div>' +
+    '</div>' +
 
+    '<div class="form-more">' +
     field('Photo URL', '<input id="f-photo" type="url" value="' + esc(r.photo) + '" placeholder="https://...">', '',
       'Optional, and only ever linked, never copied into this browser.') +
     field('Source', '<input id="f-source" type="text" value="' + esc(r.source) + '" placeholder="A book, a person, a link">') +
     field('Notes', '<textarea id="f-notes" rows="3" placeholder="Oven temperature, what to serve it with, what went wrong last time">' + esc(r.notes) + '</textarea>') +
+
+    '</div>' +
 
     '<div class="form-foot">' +
       '<button class="btn accent" data-act="save">Save recipe</button>' +
