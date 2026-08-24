@@ -395,6 +395,28 @@ table.rgrid { border-collapse: collapse; width: 100%; min-width: 520px; font-siz
 /* ── Editor ─────────────────────────────────────────────────────────── */
 
 .form { max-width: 760px; }
+.form-main, .form-steps, .form-more { min-width: 0; }
+
+/* Two columns once there is room for them: what the recipe *is* down the
+   left, how it is made beside it on the right, so a long method stops
+   pushing the fields that describe it off the bottom of the screen.
+
+   The DOM order is the phone order, and stays that way. The grid puts the
+   two left-hand blocks in rows 1 and 2 of column 1 and spans the steps down
+   the side of both, which is why the steps sit in the markup between them
+   rather than at the end. */
+@media (min-width: 1100px) {
+  .form {
+    max-width: 1200px;
+    display: grid; align-items: start;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 1.6rem;
+  }
+  .form-main  { grid-column: 1; grid-row: 1; }
+  .form-steps { grid-column: 2; grid-row: 1 / span 2; }
+  .form-more  { grid-column: 1; grid-row: 2; }
+  .form-foot  { grid-column: 1 / -1; grid-row: 3; }
+}
 .field { margin-bottom: .9rem; }
 .field.sm { flex: 1 1 110px; }
 .form-row { display: flex; gap: .6rem; flex-wrap: wrap; }
