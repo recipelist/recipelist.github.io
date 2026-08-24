@@ -526,6 +526,30 @@ table.rgrid { border-collapse: collapse; width: 100%; min-width: 520px; font-siz
   background: var(--card); color: var(--ink); font-family: inherit; font-size: .9rem; cursor: pointer;
 }
 .pick-row:hover { background: var(--row-hover); color: var(--accent); }
+
+/* Month calendar, for planning further out than the quick list reaches.
+   min-height rather than aspect-ratio: the latter is too new for the older
+   Safari this has to keep working on. */
+.cal-head { display: flex; align-items: center; gap: .5rem; margin: .6rem 0 .5rem; }
+.cal-label { flex: 1; text-align: center; font-weight: 600; font-size: .95rem; }
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.cal-dow { text-align: center; font-size: .7rem; font-weight: 600; color: var(--muted); padding: .1rem 0 .3rem; }
+.cal-day {
+  position: relative; min-height: 38px;
+  display: grid; place-items: center;
+  border: 1px solid var(--line); border-radius: 7px;
+  background: var(--card); color: var(--ink);
+  font-family: inherit; font-size: .85rem; cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.cal-day:hover { border-color: var(--accent); color: var(--accent); }
+.cal-day.today { border-color: var(--accent); font-weight: 700; color: var(--accent); }
+.cal-day.past { color: var(--muted); background: transparent; }
+.cal-blank { border: 0; background: none; min-height: 38px; }
+.cal-dot {
+  position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%);
+  width: 4px; height: 4px; border-radius: 50%; background: var(--accent);
+}
 .pick-row span { font-size: .78rem; color: var(--muted); }
 
 /* ── Cook mode ──────────────────────────────────────────────────────── */
