@@ -81,6 +81,7 @@ Files:
 - `js/units.js` — quantity parsing, scaling, aisle map
 - `js/store.js` — everything that touches localStorage
 - `js/parse.js` — paste-and-parse, JSON-LD, the step-link guess, timers
+- `js/qr.js` — the QR encoder, written out rather than pulled in
 - `js/share.js` — the device-to-device transfer
 - `js/grid.js` — the tree, and the grid and list renderers
 - `js/samples.js` — the eight demo recipes
@@ -129,11 +130,17 @@ The two devices cannot find each other on their own, and that is not an
 oversight. Discovery is the one thing a service like PairDrop keeps a server
 for, and this site has none: a page cannot open a socket, cannot listen for a
 connection, cannot ask mDNS anything, and is not even told its own address on
-the network. So you introduce the two devices yourself. The sending device
-shows a short code; you carry it to the other device, which gives you a code
-back; you paste that into the first. About 780 characters each way, by
-whatever you already use to send yourself a line of text. Everything after
-that is direct.
+the network. So you introduce the two devices yourself.
+
+The sending device shows a **QR code**. Point the other device's camera at it
+and it opens this page there with the invite already in hand, which takes no
+app and no typing. That device shows a reply code; carry that one back and
+paste it into the first, and the two are connected. (A code can be sent
+across as text instead, if the two screens are not in the same room.)
+
+Only the first hop can be a scan. The reply has to land on a page that is
+already holding a live connection open, and following a link would throw that
+connection away.
 
 Which means the honest caveat: if you can move 780 characters between the two
 devices, you could have moved the exported file. This is worth it when the
