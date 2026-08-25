@@ -248,8 +248,6 @@ function startSend(getPayload, handlers) {
 
   return {
     code: function () { return codePromise; },
-    localSdp: function () { return pc.localDescription ? pc.localDescription.sdp : ''; },
-    remoteSdp: function () { return pc.remoteDescription ? pc.remoteDescription.sdp : ''; },
     /* Step two, by camera: the reply arrives as bytes off the other screen. */
     replyBytes: function (bytes) {
       return inflate(bytes).then(function (sdp) {
@@ -290,8 +288,6 @@ function startReceive(handlers) {
   });
 
   return {
-    localSdp: function () { return pc.localDescription ? pc.localDescription.sdp : ''; },
-    remoteSdp: function () { return pc.remoteDescription ? pc.remoteDescription.sdp : ''; },
     /* The reply as bytes for the visual code, rather than as something to
        read out or paste. */
     replyBytes: function () { return deflate(pc.localDescription.sdp); },
@@ -314,49 +310,8 @@ function startReceive(handlers) {
   };
 }
 
-/* ---------- the six digits ----------
-   Not a secret and not a channel: 19.9 bits could not carry a reply if we
-   wanted it to. It is a comparison. Both ends stir the two DTLS fingerprints
-   together the same way, so if the two screens show the same number then
-   both devices are holding the same pair of certificates, and nothing has
-   quietly inserted itself between them. Bluetooth does the same thing for
-   the same reason. */
-function fingerprints(a, b) {
-  function fp(sdp) {
-    var m = String(sdp).match(/a=fingerprint:\S+ (\S+)/);
-    return m ? m[1].toUpperCase() : '';
-  }
-  return [fp(a), fp(b)].sort().join('|');
-}
-
-function sixDigits(sdpA, sdpB) {
-  var text = fingerprints(sdpA, sdpB);
-  if (!text || text === '|') return Promise.resolve(null);
-  if (global.crypto && global.crypto.subtle && global.TextEncoder) {
-    return global.crypto.subtle.digest('SHA-256', new global.TextEncoder().encode(text))
-      .then(function (buf) {
-        var v = new Uint8Array(buf);
-        var n = ((v[0] << 16) | (v[1] << 8) | v[2]) % 1000000;
-        return ('00000' + n).slice(-6);
-      }).catch(function () { return weak(text); });
-  }
-  return Promise.resolve(weak(text));
-}
-
-/* No SubtleCrypto (an insecure origin, in practice). Still fine for telling
-   two different pairings apart, which is all this number ever does. */
-function weak(text) {
-  var h = 2166136261, i;
-  for (i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i);
-    h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
-  }
-  return ('00000' + (h % 1000000)).slice(-6);
-}
-
 global.RLShare = {
   supported: supported,
-  sixDigits: sixDigits,
   startSend: startSend,
   startReceive: startReceive,
   encode: encode,

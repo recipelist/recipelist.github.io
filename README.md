@@ -137,15 +137,11 @@ the network. So you introduce the two devices yourself.
 Nothing is typed and nothing is pasted. The sending device shows a **QR
 code**; you scan it with the other device's camera, which opens this page
 there. That device answers with a code of its own on screen, and the sender
-reads it back with its camera. Both then show the **same six digit number**:
-when the two match, the two devices are talking to each other and nothing has
-inserted itself between them, which is the same check Bluetooth pairing does.
-Press confirm on the sender and the recipes go across.
+reads it back with its camera. The sender then says it is connected and how
+many recipes it is about to send, you press confirm, and across they go.
 
 Two scans, one each way, because that is the floor: a connection needs two
-messages, information only travels from a screen into a camera, and six
-digits cannot carry the second message (a reply carries 424 bits that cannot
-be guessed; six digits carry 20).
+messages and information only travels from a screen into a camera.
 
 What arrives is **merged**, exactly as an imported backup is: the same recipe
 keeps whichever side is newer, and nothing you already have is removed. Only

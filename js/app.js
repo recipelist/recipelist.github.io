@@ -1659,9 +1659,8 @@ function sharingPanelHTML() {
     'a server on the way: the recipes travel directly between the two, and nothing about them is ' +
     'stored anywhere else.</p>' +
     '<p>Nothing is typed and nothing is pasted. This device shows a code, the other device\'s camera ' +
-    'reads it, and it shows one back for this device to read. Both then show the same six digit ' +
-    'number: when the two match, the two devices are talking to each other and nothing is in ' +
-    'between. To receive, just scan the other device\'s code with your camera.</p>' +
+    'reads it, and it shows one back for this device to read. Confirm on this device and the ' +
+    'recipes go straight across. To receive, just scan the other device\'s code with your camera.</p>' +
     '<div class="btn-row">' +
       '<button class="btn accent" data-act="share-send">Send to another device</button>' +
     '</div>' +
@@ -1679,7 +1678,7 @@ function openShare(mode, prefill) {
   document.body.appendChild(wrap);
 
   var sending = (mode === 'send');
-  var st = { step: 'start', invite: '', reply: null, digits: '',
+  var st = { step: 'start', invite: '', reply: null,
              status: '', error: '', result: '', busy: false, scanner: null };
 
   draw();
@@ -1745,9 +1744,6 @@ function openShare(mode, prefill) {
       st.step = 'connecting';
       draw();
       return share.replyBytes(bytes).then(function () {
-        return RLShare.sixDigits(share.localSdp(), share.remoteSdp());
-      }).then(function (d) {
-        st.digits = d;
         st.step = 'confirm';
         st.status = '';
         draw();
@@ -1800,9 +1796,6 @@ function openShare(mode, prefill) {
     }).then(function (bytes) {
       if (!bytes) throw new Error('This browser cannot make a reply code.');
       st.reply = bytes;
-      return RLShare.sixDigits(share.localSdp(), share.remoteSdp());
-    }).then(function (d) {
-      st.digits = d;
       st.step = 'reply';
       st.status = 'Waiting for the other device…';
       draw();
@@ -1823,13 +1816,6 @@ function openShare(mode, prefill) {
     catch (e) { return '<p class="stat bad">The reply code could not be drawn.</p>'; }
   }
 
-  function digitsBlock(caption) {
-    if (!st.digits) return '';
-    return '<div class="sas"><span class="sas-num">' + esc(st.digits.slice(0, 3)) + ' ' +
-      esc(st.digits.slice(3)) + '</span></div>' +
-      '<p class="hint">' + caption + '</p>';
-  }
-
   function body() {
     if (st.step === 'done') return '<p class="stat ok">' + esc(st.result) + '</p>';
 
@@ -1841,10 +1827,13 @@ function openShare(mode, prefill) {
 
     if (sending) {
       if (st.step === 'confirm') {
-        return '<p class="hint">Both devices should be showing this number.</p>' +
-          digitsBlock('If it matches the number on the other device, they are talking to each other and nothing is in between.') +
+        var n = RLStore.all().length;
+        return '<p class="share-ready">Connected to the other device.</p>' +
+          '<p class="hint">' + n + (n === 1 ? ' recipe is' : ' recipes are') +
+          ' ready to send. They are merged into whatever is already there, so nothing ' +
+          'on the other device is lost.</p>' +
           '<div class="btn-row"><button class="btn accent big"' + (st.busy ? ' disabled' : '') +
-            ' data-act="share-confirm">' + (st.busy ? 'Sending…' : 'Confirm code and send') + '</button></div>';
+            ' data-act="share-confirm">' + (st.busy ? 'Sending…' : 'Confirm and send') + '</button></div>';
       }
       if (st.step === 'connecting') return '<p class="hint">Connecting…</p>';
       if (!st.invite) return '<p class="hint">Preparing…</p>';
@@ -1857,9 +1846,9 @@ function openShare(mode, prefill) {
     }
 
     if (st.step === 'reply') {
-      return '<p class="hint">Show this to the other device and let it scan.</p>' +
-        replyCode() +
-        digitsBlock('Check this number matches the one on the other device, then confirm there.');
+      return '<p class="hint">Show this to the other device and let it scan. ' +
+        'Then confirm on that device and the recipes will arrive.</p>' +
+        replyCode();
     }
     return '<p class="hint">Preparing…</p>';
   }
