@@ -575,7 +575,11 @@ table.rgrid { border-collapse: collapse; width: 100%; min-width: 520px; font-siz
   background: #fff; border-radius: 8px; padding: 6px;
   border: 1px solid var(--line);
 }
-.qr svg { display: block; width: 100%; height: auto; }
+/* The line-icon rule near the top of this file puts a 2px currentColor
+   stroke on every svg, and stroke inherits. A QR module is one unit wide, so
+   that stroke floods the code into a solid block. Cancelled here rather than
+   by narrowing the icon rule, which every other svg in the app relies on. */
+.qr svg { display: block; width: 100%; height: auto; stroke: none; }
 .share-alt { margin-top: .5rem; }
 .share-alt summary { cursor: pointer; color: var(--accent); font-size: .85rem; }
 .share-alt[open] summary { margin-bottom: .3rem; }
