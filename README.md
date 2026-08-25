@@ -59,8 +59,6 @@ takes it full screen with the ingredient column pinned.
 - **Shopping** — everything the plan needs, merging duplicate ingredients
   across recipes and grouping them by aisle, plus anything else you add by
   hand. The tab carries a count of what is still to buy.
-- **Sharing** — send every recipe straight to another device, browser to
-  browser, with nothing passing through a server on the way.
 - **Settings** — dark or light, default view, export and import, auto-save to
   a file, and the storage health readout.
 
@@ -81,10 +79,6 @@ Files:
 - `js/units.js` — quantity parsing, scaling, aisle map
 - `js/store.js` — everything that touches localStorage
 - `js/parse.js` — paste-and-parse, JSON-LD, the step-link guess, timers
-- `js/qr.js` — the QR encoder, written out rather than pulled in
-- `js/vcode.js` — the reply code and its reader, also written out
-- `js/scan.js` — the camera viewfinder
-- `js/beam.js` — the collection cut into frames, and put back together
 - `js/grid.js` — the tree, and the grid and list renderers
 - `js/samples.js` — the eight demo recipes
 - `js/app.js` — routing, pages, editor, cook mode, planner, list
@@ -121,29 +115,6 @@ a desktop only; the panel says so plainly on Firefox and on iOS, where manual
 export stays the way. And browsers grant file-write permission for one visit
 at a time, so after a refresh the panel shows **Paused** with a Resume button
 until you pick *Allow on every visit* in the browser's own prompt.
-
-### Sending recipes to another device
-
-Settings has a **Sharing** panel. Press the button and this device puts the
-whole collection on its screen as a repeating loop of codes. On the other
-device, point the camera at the first one; it opens this page, asks whether
-you want the recipes, and reads the rest of the loop while you hold it there.
-It shows how many parts it has as it goes, and tells you when it is done.
-
-Nothing is typed, pasted or paired, and there is no second code to carry
-back. There is also no network: no server, no connection, no accounts. The
-recipes travel as light, from one screen into one camera, and both devices
-can be in aeroplane mode.
-
-What arrives is **merged**, exactly as an imported backup is: the same recipe
-keeps whichever side is newer, and nothing you already have is removed. Only
-do this with a device you own or a person you trust.
-
-Two honest limits. It is one way, so the sending screen has no way of knowing
-when the other device has finished; keep it showing until that device says
-so. And it is paced by how much there is: eight recipes is nine codes and a
-few seconds of holding still, while a very large collection takes
-proportionally longer.
 
 ## Licence## Licence
 
