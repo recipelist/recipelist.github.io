@@ -87,17 +87,6 @@ function route() {
     return;
   }
 
-  /* A scanned invite arrives as #pair/<code>. Hand it to Settings and let
-     the Receive dialog pick it up, then put the address bar back: a code is
-     a one-time thing and has no business staying in the history where a
-     reload would replay it. */
-  var scanned = (location.hash || '').replace(/^#/, '').split('/');
-  if (scanned[0] === 'recv' || scanned[0] === 'pair') {
-    pendingInvite = 'recv';
-    location.replace('#settings');
-    return;
-  }
-
   var next = parseHash();
 
   /* Leaving the editor with unsaved work is the one navigation worth
@@ -143,10 +132,6 @@ function route() {
   window.scrollTo(0, 0);
   updateCounts();
 
-  if (pendingInvite && page === 'settings') {
-    pendingInvite = '';
-    openShare('receive');
-  }
 }
 
 /* ---------------- library ---------------- */
@@ -936,8 +921,6 @@ function renderSettings() {
       : 'Eight recipes to look around with, including the coffee cake the grid format is usually shown with.') + '</p>' +
   '</section>' +
 
-  sharingPanelHTML() +
-
   autosavePanelHTML() +
 
   '<section class="panel"><h2>Storage</h2>' +
@@ -1412,7 +1395,6 @@ function handleClick(e) {
       break;
     }
     case 'import': $('#importfile').click(); break;
-    case 'share-send': openShare('send'); break;
     case 'as-pick': autosavePick(); break;
     case 'as-now': autosaveWrite(true); break;
     case 'as-reconnect': autosaveReconnect(); break;
@@ -1643,262 +1625,6 @@ function closeGridFull() {
    has that a page on GitHub Pages cannot have, because finding another
    device means a server both devices can reach. The transfer afterwards
    needs no server, so that is what this does. See the head of share.js. */
-
-var share = null;      /* the live exchange, so a second dialog cannot start one behind the first */
-var pendingInvite = '';   /* an invite that arrived by link, waiting for Settings to be on screen */
-
-function sharingPanelHTML() {
-  if (typeof CompressionStream !== 'function') {
-    return '<section class="panel"><h2>Sharing</h2>' +
-      '<p>This browser cannot prepare a transfer. Export a backup and import it on the other ' +
-      'device instead.</p></section>';
-  }
-  return '<section class="panel"><h2>Sharing</h2>' +
-    '<p>Send every recipe to another device by holding its camera up to this screen. There is no ' +
-    'server, no pairing and no network involved at all: the recipes travel as light, from one ' +
-    'screen into one camera, and both devices could be in aeroplane mode.</p>' +
-    '<p>Nothing is typed, pasted or paired. Press the button, point the other device\'s camera at ' +
-    'the code that appears, answer yes on that device, and hold it there while it reads. It shows ' +
-    'how much it has as it goes.</p>' +
-    '<div class="btn-row">' +
-      '<button class="btn accent" data-act="share-send">Send to another device</button>' +
-    '</div>' +
-    '<p class="hint">Arriving recipes are merged, exactly as an imported backup is: same recipe keeps ' +
-    'whichever side is newer, and nothing you have is ever removed. Only pair with a device you own ' +
-    'or a person you trust.</p>' +
-  '</section>';
-}
-
-function openShare(mode, prefill) {
-  if (share) { share.close(); share = null; }
-
-  var wrap = document.createElement('div');
-  wrap.className = 'modal-scrim';
-  document.body.appendChild(wrap);
-
-  var sending = (mode === 'send');
-  var st = { step: 'start', status: '', error: '', result: '',
-             have: 0, total: 0, scanner: null, loop: null };
-
-  draw();
-  if (sending) beginBeam(); else st.step = 'ask';
-  draw();
-
-  wrap.addEventListener('click', function (e) {
-    if (e.target === wrap || e.target.closest('[data-act="close-modal"]')) return shut();
-    var b = e.target.closest('[data-act]');
-    if (!b) return;
-    switch (b.getAttribute('data-act')) {
-      case 'beam-yes': startReceiving(); break;
-      case 'beam-stop': if (st.scanner) st.scanner.cancel(); break;
-    }
-  });
-
-  function shut() {
-    if (st.loop) { clearTimeout(st.loop); st.loop = null; }
-    if (st.scanner) { try { st.scanner.cancel(); } catch (e) {} }
-    wrap.remove();
-  }
-
-  function fail(err) {
-    st.error = (err && err.message) || String(err);
-    if (st.error === 'cancelled') { st.error = ''; st.step = 'ask'; }
-    draw();
-  }
-
-  /* ---------- the sending screen ----------
-     A loop: the link code, so the other device's camera can open this page,
-     then every frame of the collection, then round again. Nothing comes
-     back, so nothing here waits on anything. */
-
-  function beginBeam() {
-    st.status = 'Preparing…';
-    draw();
-    RLBeam.deflate(JSON.stringify(RLStore.exportData())).then(function (bytes) {
-      if (!bytes) throw new Error('This browser cannot prepare a transfer.');
-      var set = RLBeam.frames(bytes);
-      var link = location.origin + location.pathname + '#recv';
-
-      /* Everything is drawn once, up front, and the loop only swaps which
-         canvas is on screen. Re-rendering four thousand squares five times a
-         second would cost far more than it is worth. */
-      var slides = [];
-      slides.push({ canvas: renderQr(link), ms: 1400, label: 'Scan this to start' });
-      set.frames.forEach(function (f, i) {
-        slides.push({ canvas: renderVCode(f), ms: 190,
-                      label: 'Sending ' + (i + 1) + ' of ' + set.total });
-      });
-
-      st.total = set.total;
-      st.frameBytes = bytes.length;
-      st.step = 'beaming';
-      st.status = '';
-      draw();
-
-      var at = 0;
-      function tick() {
-        var host = $('#beam-slide', wrap);
-        if (!host) return;                       /* dialog closed */
-        var slide = slides[at % slides.length];
-        if (host.firstChild !== slide.canvas) {
-          host.innerHTML = '';
-          host.appendChild(slide.canvas);
-        }
-        var cap = $('#beam-caption', wrap);
-        if (cap) cap.textContent = slide.label;
-        at++;
-        st.loop = setTimeout(tick, slide.ms);
-      }
-      tick();
-    }).catch(fail);
-  }
-
-  function renderQr(text) {
-    var code = RLQr.encode(text), quiet = 4, px = 6;
-    var span = (code.size + quiet * 2) * px;
-    var cv = document.createElement('canvas');
-    cv.width = cv.height = span;
-    var ctx = cv.getContext('2d');
-    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, span, span);
-    ctx.fillStyle = '#000';
-    for (var y = 0; y < code.size; y++) {
-      for (var x = 0; x < code.size; x++) {
-        if (code.modules[y][x]) ctx.fillRect((x + quiet) * px, (y + quiet) * px, px, px);
-      }
-    }
-    return cv;
-  }
-
-  function renderVCode(bytes) {
-    var grid = RLVCode.encode(bytes), px = 6;
-    var span = (RLVCode.SIZE + RLVCode.QUIET * 2) * px;
-    var cv = document.createElement('canvas');
-    cv.width = cv.height = span;
-    RLVCode.draw(cv.getContext('2d'), grid, px);
-    return cv;
-  }
-
-  /* ---------- the receiving screen ---------- */
-
-  function startReceiving() {
-    st.step = 'reading';
-    st.error = '';
-    st.have = 0; st.total = 0;
-    draw();
-
-    var box = $('#scan-view', wrap);
-    if (!box) return;
-    var bag = RLBeam.collector();
-
-    st.scanner = RLScan.scan(box, {
-      onstart: function () { st.status = 'Point this at the other screen.'; draw(); },
-      oncode: function (bytes) {
-        var done = bag.add(bytes);
-        if (bag.total() && (bag.have() !== st.have || bag.total() !== st.total)) {
-          st.have = bag.have(); st.total = bag.total();
-          st.status = '';
-          paint();
-        }
-        return done;
-      }
-    });
-
-    st.scanner.result.then(function () {
-      st.scanner = null;
-      st.step = 'importing';
-      st.status = 'Reading them in…';
-      draw();
-      return RLBeam.inflate(bag.payload());
-    }).then(function (text) {
-      var data = JSON.parse(text);
-      var res = RLStore.importData(data, { withPlan: false });
-      st.step = 'done';
-      st.status = '';
-      st.result = 'Added ' + res.added + ', updated ' + res.updated + ', left alone ' + res.skipped + '.';
-      draw();
-      updateCounts();
-    }).catch(function (err) {
-      st.scanner = null;
-      fail(err && err.message === 'cancelled' ? err : new Error('That transfer could not be read.'));
-    });
-  }
-
-  /* Progress changes many times a second; redrawing the whole dialog would
-     tear down the video element along with it. */
-  function paint() {
-    var bar = $('#beam-bar', wrap), txt = $('#beam-count', wrap);
-    if (bar && st.total) bar.style.width = Math.round(st.have / st.total * 100) + '%';
-    if (txt && st.total) txt.textContent = st.have + ' of ' + st.total + ' parts';
-  }
-
-  function progressBlock() {
-    return '<div class="beam-bar"><span id="beam-bar" style="width:' +
-      (st.total ? Math.round(st.have / st.total * 100) : 0) + '%"></span></div>' +
-      '<p class="hint" id="beam-count">' +
-        (st.total ? st.have + ' of ' + st.total + ' parts' : 'Looking…') + '</p>';
-  }
-
-  function body() {
-    if (st.step === 'done') return '<p class="stat ok">' + esc(st.result) + '</p>';
-
-    if (sending) {
-      if (st.step !== 'beaming') return '<p class="hint">Preparing…</p>';
-      return '<p class="hint">Scan this with the other device, then keep its camera here ' +
-        'until it says it has everything.</p>' +
-        '<div class="qr beam-slide" id="beam-slide"></div>' +
-        '<p class="hint" id="beam-caption"></p>' +
-        '<p class="hint">' + RLStore.all().length + ' recipes, ' + st.total + ' parts, repeating.</p>';
-    }
-
-    if (st.step === 'ask') {
-      return '<p class="share-ready">Ready to receive.</p>' +
-        '<p class="hint">Do you want to transfer all recipes from the other device? ' +
-        'They are merged into what you already have, so nothing here is lost.</p>' +
-        '<div class="btn-row"><button class="btn accent big" data-act="beam-yes">Yes, transfer</button></div>';
-    }
-    if (st.step === 'reading') {
-      return '<p class="hint">Hold this over the other device\'s screen.</p>' +
-        '<div class="scan-view" id="scan-view"><div class="scan-guide"></div></div>' +
-        progressBlock() +
-        '<div class="btn-row"><button class="btn" data-act="beam-stop">Stop</button></div>';
-    }
-    if (st.step === 'importing') return progressBlock();
-    return '<p class="hint">Preparing…</p>';
-  }
-
-  function draw() {
-    wrap.innerHTML = '<div class="modal" role="dialog" aria-label="Transfer recipes">' +
-      '<h2>' + (sending ? 'Send to another device' : 'Receive recipes') + '</h2>' +
-      body() +
-      (st.status ? '<p class="hint">' + esc(st.status) + '</p>' : '') +
-      (st.error ? '<p class="stat bad">' + esc(st.error) + '</p>' : '') +
-      '<div class="modal-foot"><button class="btn" data-act="close-modal">' +
-        (st.step === 'done' ? 'Done' : 'Cancel') + '</button></div>' +
-    '</div>';
-  }
-}
-
-/* navigator.clipboard is not there on an insecure origin, and this app is
-   perfectly usable over plain http on a home network. */
-function copyText(text) {
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    return navigator.clipboard.writeText(text).catch(fallback);
-  }
-  return fallback();
-
-  function fallback() {
-    return new Promise(function (resolve) {
-      var ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.cssText = 'position:fixed;top:-1000px';
-      document.body.appendChild(ta);
-      ta.select();
-      try { document.execCommand('copy'); } catch (e) {}
-      ta.remove();
-      resolve();
-    });
-  }
-}
 
 /* ---------------- auto-save to a file ----------------
    The File System Access API hands back a handle to a file the user picked.
