@@ -1414,7 +1414,6 @@ function handleClick(e) {
     }
     case 'import': $('#importfile').click(); break;
     case 'share-send': openShare('send'); break;
-    case 'share-recv': openShare('receive'); break;
     case 'as-pick': autosavePick(); break;
     case 'as-now': autosaveWrite(true); break;
     case 'as-reconnect': autosaveReconnect(); break;
@@ -1659,12 +1658,12 @@ function sharingPanelHTML() {
     '<p>Send every recipe straight to another device, browser to browser. Nothing goes through ' +
     'a server on the way: the recipes travel directly between the two, and nothing about them is ' +
     'stored anywhere else.</p>' +
-    '<p>The two devices cannot find each other on their own, which is what a service like PairDrop ' +
-    'keeps a server for. So you introduce them: carry one short code across and one back, using ' +
-    'whatever you already use to send yourself a line of text. After that the recipes go direct.</p>' +
+    '<p>Nothing is typed and nothing is pasted. This device shows a code, the other device\'s camera ' +
+    'reads it, and it shows one back for this device to read. Both then show the same six digit ' +
+    'number: when the two match, the two devices are talking to each other and nothing is in ' +
+    'between. To receive, just scan the other device\'s code with your camera.</p>' +
     '<div class="btn-row">' +
       '<button class="btn accent" data-act="share-send">Send to another device</button>' +
-      '<button class="btn" data-act="share-recv">Receive from another device</button>' +
     '</div>' +
     '<p class="hint">Arriving recipes are merged, exactly as an imported backup is: same recipe keeps ' +
     'whichever side is newer, and nothing you have is ever removed. Only pair with a device you own ' +
@@ -1680,82 +1679,107 @@ function openShare(mode, prefill) {
   document.body.appendChild(wrap);
 
   var sending = (mode === 'send');
-  var state2 = { step: 1, code: '', status: '', error: '', result: '', busy: false };
+  var st = { step: 'start', invite: '', reply: null, digits: '',
+             status: '', error: '', result: '', busy: false, scanner: null };
 
   draw();
   if (sending) beginSend();
-  else if (prefill) {
-    /* Arrived by scanning: the code is already in hand, so go straight on
-       rather than showing a box and asking for what we have. */
-    var box = $('#share-in', wrap);
-    if (box) box.value = prefill;
-    advance();
-  }
+  else if (prefill) takeInvite(prefill);
 
   wrap.addEventListener('click', function (e) {
     if (e.target === wrap || e.target.closest('[data-act="close-modal"]')) return shut();
     var b = e.target.closest('[data-act]');
     if (!b) return;
-    var act = b.getAttribute('data-act');
-    if (act === 'share-copy') {
-      var box = $('#share-code', wrap);
-      box.select();
-      copyText(box.value).then(function () { toast('Code copied.'); });
-      return;
-    }
-    if (act === 'share-go') { advance(); return;
+    switch (b.getAttribute('data-act')) {
+      case 'share-scan': openScanner(); break;
+      case 'share-confirm': confirmAndSend(); break;
+      case 'share-cancel-scan': if (st.scanner) st.scanner.cancel(); break;
+      case 'share-retry': st.error = ''; draw(); break;
     }
   });
 
   function shut() {
+    if (st.scanner) { try { st.scanner.cancel(); } catch (e) {} }
     if (share) { share.close(); share = null; }
     wrap.remove();
   }
 
   function fail(err) {
-    state2.busy = false;
-    state2.error = (err && err.message) || String(err);
+    st.busy = false;
+    st.error = (err && err.message) || String(err);
+    if (st.error === 'cancelled') st.error = '';
+    st.step = st.step === 'scanning' ? 'invite' : st.step;
     draw();
   }
+
+  /* ---------- sending ---------- */
 
   function beginSend() {
     share = RLShare.startSend(
       function () { return JSON.stringify(RLStore.exportData()); },
-      { onstatus: function (t) { state2.status = t; draw(); },
-        onprogress: function (a, b) { state2.status = 'Sending ' + a + ' of ' + b + '…'; draw(); },
+      { onstatus: function (t) { st.status = t; draw(); },
+        onprogress: function (a, b) { st.status = 'Sending ' + a + ' of ' + b + '…'; draw(); },
         onerror: fail });
-    state2.status = 'Preparing…';
+    st.status = 'Preparing…';
     draw();
     share.code().then(function (code) {
-      state2.code = code;
-      state2.status = '';
+      st.invite = code;
+      st.status = '';
+      st.step = 'invite';
       draw();
     }).catch(fail);
   }
 
-  /* The one button that moves the exchange along; what it does depends on
-     which side of it you are and how far you have got. */
-  function advance() {
-    var input = $('#share-in', wrap);
-    var value = input ? input.value.trim() : '';
-    if (!value) { toast('Paste the code from the other device first.', 'bad'); return; }
-    state2.busy = true; state2.error = ''; draw();
-
-    if (sending) {
-      share.reply(value).then(function (bytes) {
-        state2.busy = false;
-        state2.step = 3;
-        state2.result = 'Sent ' + RLStore.all().length + ' recipes (' + Math.round(bytes / 1024) + ' KB).';
+  function openScanner() {
+    st.step = 'scanning';
+    st.error = '';
+    draw();
+    var box = $('#scan-view', wrap);
+    if (!box) return;
+    st.scanner = RLScan.scan(box, {
+      onstart: function () { st.status = 'Looking…'; draw(); }
+    });
+    st.scanner.result.then(function (bytes) {
+      st.scanner = null;
+      st.status = 'Connecting…';
+      st.step = 'connecting';
+      draw();
+      return share.replyBytes(bytes).then(function () {
+        return RLShare.sixDigits(share.localSdp(), share.remoteSdp());
+      }).then(function (d) {
+        st.digits = d;
+        st.step = 'confirm';
+        st.status = '';
         draw();
-      }).catch(fail);
-      return;
-    }
+      });
+    }).catch(function (err) {
+      st.scanner = null;
+      fail(err);
+    });
+  }
 
-    /* Receiving: the invite goes in, the reply comes out, and the recipes
-       arrive whenever the other device gets round to sending them. */
+  function confirmAndSend() {
+    st.busy = true; st.status = 'Connecting…'; draw();
+    share.open().then(function () {
+      st.status = 'Sending…';
+      draw();
+      return share.send(JSON.stringify(RLStore.exportData()));
+    }).then(function (bytes) {
+      st.busy = false;
+      st.step = 'done';
+      st.result = 'Sent ' + RLStore.all().length + ' recipes (' + Math.round(bytes / 1024) + ' KB).';
+      draw();
+    }).catch(fail);
+  }
+
+  /* ---------- receiving ---------- */
+
+  function takeInvite(code) {
+    st.status = 'Preparing…';
+    draw();
     share = RLShare.startReceive({
-      onstatus: function (t) { state2.status = t; draw(); },
-      onprogress: function (a, b) { state2.status = 'Receiving ' + a + (b ? ' of ' + b : '') + '…'; draw(); },
+      onstatus: function (t) { st.status = t; draw(); },
+      onprogress: function (a, b) { st.status = 'Receiving ' + a + (b ? ' of ' + b : '') + '…'; draw(); },
       onerror: fail,
       ondata: function (text) {
         var data;
@@ -1764,89 +1788,90 @@ function openShare(mode, prefill) {
         var res;
         try { res = RLStore.importData(data, { withPlan: false }); }
         catch (err2) { return fail(err2); }
-        state2.step = 3;
-        state2.status = '';
-        state2.result = 'Added ' + res.added + ', updated ' + res.updated + ', left alone ' + res.skipped + '.';
+        st.step = 'done';
+        st.status = '';
+        st.result = 'Added ' + res.added + ', updated ' + res.updated + ', left alone ' + res.skipped + '.';
         draw();
         updateCounts();
       }
     });
-    share.offer(value).then(function (code) {
-      state2.busy = false;
-      state2.step = 2;
-      state2.code = code;
-      state2.status = 'Waiting for the recipes…';
+    share.offer(code).then(function () {
+      return share.replyBytes();
+    }).then(function (bytes) {
+      if (!bytes) throw new Error('This browser cannot make a reply code.');
+      st.reply = bytes;
+      return RLShare.sixDigits(share.localSdp(), share.remoteSdp());
+    }).then(function (d) {
+      st.digits = d;
+      st.step = 'reply';
+      st.status = 'Waiting for the other device…';
       draw();
     }).catch(fail);
   }
 
-  /* The link the other device is asked to open. Its own camera app reads
-     this; nothing here has to scan anything, which is just as well, because
-     the decoder half is not something a page can count on having. */
-  function pairLink() {
-    return location.origin + location.pathname + '#pair/' + state2.code;
-  }
+  /* ---------- what it looks like ---------- */
 
-  function qrBlock() {
-    var link = pairLink();
+  function inviteQr() {
+    var link = location.origin + location.pathname + '#pair/' + st.invite;
     if (!global.RLQr || link.length > RLQr.maxBytes) return '';
-    var svg;
-    try { svg = RLQr.svg(link, { label: 'Invite code' }); }
+    try { return '<div class="qr">' + RLQr.svg(link, { label: 'Invite code' }) + '</div>'; }
     catch (e) { return ''; }
-    return '<div class="qr">' + svg + '</div>' +
-      '<p class="hint">Point the other device\'s camera at this. It opens this page ' +
-      'there with the invite already in hand.</p>';
   }
 
-  function codeBox(label, hint) {
-    return '<label class="lbl">' + esc(label) + '</label>' +
-      '<textarea id="share-code" rows="3" readonly onclick="this.select()">' + esc(state2.code) + '</textarea>' +
-      '<div class="btn-row"><button class="btn small" data-act="share-copy">Copy this code</button></div>' +
-      (hint ? '<p class="hint">' + hint + '</p>' : '');
+  function replyCode() {
+    try { return '<div class="qr vcode">' + RLVCode.svg(st.reply) + '</div>'; }
+    catch (e) { return '<p class="stat bad">The reply code could not be drawn.</p>'; }
   }
 
-  function inputBox(label, hint, button) {
-    return '<label class="lbl">' + esc(label) + '</label>' +
-      '<textarea id="share-in" rows="3" placeholder="Paste the code here"></textarea>' +
-      '<div class="btn-row"><button class="btn accent" data-act="share-go"' +
-        (state2.busy ? ' disabled' : '') + '>' + esc(state2.busy ? 'Working…' : button) + '</button></div>' +
-      (hint ? '<p class="hint">' + hint + '</p>' : '');
+  function digitsBlock(caption) {
+    if (!st.digits) return '';
+    return '<div class="sas"><span class="sas-num">' + esc(st.digits.slice(0, 3)) + ' ' +
+      esc(st.digits.slice(3)) + '</span></div>' +
+      '<p class="hint">' + caption + '</p>';
+  }
+
+  function body() {
+    if (st.step === 'done') return '<p class="stat ok">' + esc(st.result) + '</p>';
+
+    if (st.step === 'scanning') {
+      return '<p class="hint">Point this at the code on the other device. Fill the frame with it.</p>' +
+        '<div class="scan-view" id="scan-view"><div class="scan-guide"></div></div>' +
+        '<div class="btn-row"><button class="btn" data-act="share-cancel-scan">Stop</button></div>';
+    }
+
+    if (sending) {
+      if (st.step === 'confirm') {
+        return '<p class="hint">Both devices should be showing this number.</p>' +
+          digitsBlock('If it matches the number on the other device, they are talking to each other and nothing is in between.') +
+          '<div class="btn-row"><button class="btn accent big"' + (st.busy ? ' disabled' : '') +
+            ' data-act="share-confirm">' + (st.busy ? 'Sending…' : 'Confirm code and send') + '</button></div>';
+      }
+      if (st.step === 'connecting') return '<p class="hint">Connecting…</p>';
+      if (!st.invite) return '<p class="hint">Preparing…</p>';
+      return '<p class="hint"><strong>1.</strong> Scan this with the other device\'s camera.</p>' +
+        inviteQr() +
+        '<p class="hint"><strong>2.</strong> It will show a code back. Scan that with this device.</p>' +
+        '<div class="btn-row"><button class="btn accent" data-act="share-scan"' +
+          (RLScan.supported() ? '' : ' disabled') + '>Scan the reply code</button></div>' +
+        (RLScan.supported() ? '' : '<p class="hint">This device has no camera to scan with.</p>');
+    }
+
+    if (st.step === 'reply') {
+      return '<p class="hint">Show this to the other device and let it scan.</p>' +
+        replyCode() +
+        digitsBlock('Check this number matches the one on the other device, then confirm there.');
+    }
+    return '<p class="hint">Preparing…</p>';
   }
 
   function draw() {
-    var body;
-    if (state2.step === 3) {
-      body = '<p class="stat ok">' + esc(state2.result) + '</p>';
-    } else if (sending) {
-      body =
-        '<p class="hint"><strong>1.</strong> Scan this with the other device.</p>' +
-        (state2.code
-          ? qrBlock() +
-            '<details class="share-alt"><summary>Cannot scan it?</summary>' +
-            '<p class="hint">Send this code across instead, and paste it into ' +
-            '<em>Receive</em> in Settings there.</p>' +
-            codeBox('Your invite code') + '</details>'
-          : '<p class="hint">Preparing…</p>') +
-        '<p class="hint"><strong>2.</strong> The other device shows a reply code. Paste it here.</p>' +
-        inputBox('Reply code', '', 'Connect and send');
-    } else if (state2.step === 1) {
-      body =
-        '<p class="hint"><strong>1.</strong> Paste the invite code from the device that is sending.</p>' +
-        inputBox('Invite code', '', 'Continue');
-    } else {
-      body =
-        '<p class="hint"><strong>2.</strong> Send this reply code back to the other device and paste ' +
-        'it there. Keep this open until the recipes arrive.</p>' +
-        codeBox('Your reply code');
-    }
-
     wrap.innerHTML = '<div class="modal" role="dialog" aria-label="Share recipes">' +
       '<h2>' + (sending ? 'Send to another device' : 'Receive from another device') + '</h2>' +
-      body +
-      (state2.status ? '<p class="hint">' + esc(state2.status) + '</p>' : '') +
-      (state2.error ? '<p class="stat bad">' + esc(state2.error) + '</p>' : '') +
+      body() +
+      (st.status ? '<p class="hint">' + esc(st.status) + '</p>' : '') +
+      (st.error ? '<p class="stat bad">' + esc(st.error) + '</p>' : '') +
       '<div class="modal-foot"><button class="btn" data-act="close-modal">' +
-        (state2.step === 3 ? 'Done' : 'Cancel') + '</button></div>' +
+        (st.step === 'done' ? 'Done' : 'Cancel') + '</button></div>' +
     '</div>';
   }
 }
