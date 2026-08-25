@@ -60,7 +60,7 @@ takes it full screen with the ingredient column pinned.
   across recipes and grouping them by aisle, plus anything else you add by
   hand. The tab carries a count of what is still to buy.
 - **Settings** — dark or light, default view, export and import, auto-save to
-  a file, and the storage health readout.
+  a file with the storage health readout beside it.
 
 Dark mode is the default. Everything you enter stays in this browser.
 

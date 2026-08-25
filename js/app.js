@@ -887,7 +887,7 @@ function shopHTML() {
 /* ---------------- settings ---------------- */
 
 function renderSettings() {
-  var prefs = RLStore.getPrefs(), health = RLStore.health(), all = RLStore.all();
+  var prefs = RLStore.getPrefs(), all = RLStore.all();
   var ings = 0, steps = 0;
   all.forEach(function (r) { ings += r.ingredients.length; steps += r.steps.length; });
 
@@ -922,12 +922,6 @@ function renderSettings() {
   '</section>' +
 
   autosavePanelHTML() +
-
-  '<section class="panel"><h2>Storage</h2>' +
-    '<p class="stat ' + (health.ok ? 'ok' : 'bad') + '">' +
-      (health.ok ? 'Saving works in this browser.' : 'Saving is failing: ' + esc(health.error)) + '</p>' +
-    (health.ok ? '' : '<p class="hint">Private windows and full storage both cause this. Export what you can see now, before adding anything else.</p>') +
-  '</section>' +
 
   '<section class="panel"><h2>About</h2>' +
     '<p>A recipe book that lives in your browser. Recipes are held as a tree, not a list: each step names what it consumes, which is what lets the same recipe be drawn either as the ingredients-and-operations grid or as an ordinary ingredients-then-method page.</p>' +
@@ -1788,14 +1782,31 @@ function renderAutosave() {
   if (state.route.name === 'settings') renderSettings();
 }
 
+/* The health of the browser's own storage, which used to be a panel of its
+   own. It reads first here because it is about where the recipes actually
+   are; the file below it is the second copy. It also has to say "in this
+   browser" in so many words now: the heading above it talks about a file,
+   and a bare "saving is failing" under that heading would look like the file
+   was the thing failing. */
+function storageHealthHTML() {
+  var health = RLStore.health();
+  return '<p class="stat ' + (health.ok ? 'ok' : 'bad') + '">' +
+      (health.ok ? 'Saving works in this browser.'
+                 : 'Saving to this browser is failing: ' + esc(health.error)) + '</p>' +
+    (health.ok ? '' : '<p class="hint">Private windows and full storage both cause this. ' +
+      'Export what you can see now, before adding anything else.</p>');
+}
+
 function autosavePanelHTML() {
   if (!autosaveSupported()) {
     return '<section class="panel"><h2>Auto-save to a file</h2>' +
+      storageHealthHTML() +
       '<p>This browser cannot write to a file you choose, so the Export button above is the way to get a copy out. ' +
       'Chrome, Edge and other Chromium browsers on a desktop can do it; Firefox and everything on iOS cannot.</p></section>';
   }
   var on = !!autosave.handle;
   var html = '<section class="panel"><h2>Auto-save to a file</h2>' +
+    storageHealthHTML() +
     '<p>Pick a file once and every recipe, the planner and the shopping list are written to it whenever anything changes. ' +
     'Point it at a synced folder and you get an off-machine copy for free, which another device can import from.</p>' +
     '<div class="btn-row">' +
