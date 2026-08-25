@@ -438,11 +438,17 @@ function svg(text, opts) {
       if (code.modules[r][c]) d += 'M' + (c + quiet) + ' ' + (r + quiet) + 'h1v1h-1z';
     }
   }
+  /* stroke="none" on both, and again on the svg itself, is not belt and
+     braces. Every other svg in this app is a line icon, so the stylesheet
+     sets stroke: currentColor and stroke-width: 2 on svg, and stroke is
+     inherited. A module here is one unit across, so a two unit stroke around
+     each one swallows its neighbours and the whole code fills in solid, in
+     the theme's ink rather than black. Which is exactly what it did. */
   return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + span + ' ' + span + '" ' +
-    'shape-rendering="crispEdges" role="img" aria-label="' +
+    'shape-rendering="crispEdges" stroke="none" fill="none" role="img" aria-label="' +
     (opts.label ? String(opts.label).replace(/[<>&"]/g, '') : 'QR code') + '">' +
-    '<rect width="' + span + '" height="' + span + '" fill="#ffffff"/>' +
-    '<path d="' + d + '" fill="#000000"/></svg>';
+    '<rect width="' + span + '" height="' + span + '" fill="#ffffff" stroke="none"/>' +
+    '<path d="' + d + '" fill="#000000" stroke="none"/></svg>';
 }
 
 /* ---------- refusing to ship a wrong table ----------
