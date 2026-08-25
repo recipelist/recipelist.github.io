@@ -59,6 +59,8 @@ takes it full screen with the ingredient column pinned.
 - **Shopping** — everything the plan needs, merging duplicate ingredients
   across recipes and grouping them by aisle, plus anything else you add by
   hand. The tab carries a count of what is still to buy.
+- **Sharing** — send every recipe straight to another device, browser to
+  browser, with nothing passing through a server on the way.
 - **Settings** — dark or light, default view, export and import, auto-save to
   a file, and the storage health readout.
 
@@ -79,6 +81,7 @@ Files:
 - `js/units.js` — quantity parsing, scaling, aisle map
 - `js/store.js` — everything that touches localStorage
 - `js/parse.js` — paste-and-parse, JSON-LD, the step-link guess, timers
+- `js/share.js` — the device-to-device transfer
 - `js/grid.js` — the tree, and the grid and list renderers
 - `js/samples.js` — the eight demo recipes
 - `js/app.js` — routing, pages, editor, cook mode, planner, list
@@ -115,6 +118,31 @@ a desktop only; the panel says so plainly on Firefox and on iOS, where manual
 export stays the way. And browsers grant file-write permission for one visit
 at a time, so after a refresh the panel shows **Paused** with a Resume button
 until you pick *Allow on every visit* in the browser's own prompt.
+
+### Sharing between your devices
+
+Settings has a **Sharing** panel. It sends the whole collection from one
+browser straight to another over WebRTC: the recipes go directly between the
+two devices and nothing about them is stored anywhere in between.
+
+The two devices cannot find each other on their own, and that is not an
+oversight. Discovery is the one thing a service like PairDrop keeps a server
+for, and this site has none: a page cannot open a socket, cannot listen for a
+connection, cannot ask mDNS anything, and is not even told its own address on
+the network. So you introduce the two devices yourself. The sending device
+shows a short code; you carry it to the other device, which gives you a code
+back; you paste that into the first. About 780 characters each way, by
+whatever you already use to send yourself a line of text. Everything after
+that is direct.
+
+Which means the honest caveat: if you can move 780 characters between the two
+devices, you could have moved the exported file. This is worth it when the
+collection is large, because the handshake stays the same size however many
+recipes follow it, and when juggling a file is the annoying part.
+
+What arrives is **merged**, exactly as an imported backup is: the same recipe
+keeps whichever side is newer, and nothing you already have is removed. Only
+pair with a device you own or a person you trust.
 
 ## Licence
 
