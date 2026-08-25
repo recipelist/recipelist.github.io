@@ -595,6 +595,17 @@ table.rgrid { border-collapse: collapse; width: 100%; min-width: 520px; font-siz
   border-radius: 8px; pointer-events: none;
 }
 
+/* The looping code. Fixed height so the dialog does not jump as the frames
+   change size between the link code and the data ones. */
+.beam-slide { display: grid; place-items: center; }
+.beam-slide canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; }
+
+.beam-bar {
+  height: 8px; border-radius: 4px; background: var(--line);
+  overflow: hidden; margin: .6rem 0 .2rem;
+}
+.beam-bar span { display: block; height: 100%; background: var(--accent); transition: width .2s; }
+
 .share-alt { margin-top: .5rem; }
 .share-alt summary { cursor: pointer; color: var(--accent); font-size: .85rem; }
 .share-alt[open] summary { margin-bottom: .3rem; }

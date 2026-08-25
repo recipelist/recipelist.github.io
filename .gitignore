@@ -12,3 +12,7 @@ GEMINI.md
 .cursorrules
 .aider*
 .github/copilot-instructions.md
+
+# Files taken out of use are moved here rather than deleted, so they stay
+# on the machine that retired them without riding along in the repo.
+Trash/
