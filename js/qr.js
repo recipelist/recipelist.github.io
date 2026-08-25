@@ -251,7 +251,13 @@ function versionBits(v) {
 function placeFormat(m, mask) {
   var bits = formatBits(mask), n = m.length, i, b;
   for (i = 0; i <= 14; i++) {
-    b = (bits >> i) & 1;
+    /* Most significant bit first. The path below runs (8,0), (8,1) ... and
+       carries bits 14, 13 ... 0 along it, not 0, 1 ... 14. Filling it the
+       other way round produces a symbol that is perfectly self-consistent
+       and that no reader on earth can parse: the format tells a scanner
+       which mask to undo, so getting it backwards loses the whole code
+       before the data is even reached. */
+    b = (bits >> (14 - i)) & 1;
     /* the copy beside the top-left finder */
     if (i < 6) m[8][i] = b;
     else if (i === 6) m[8][7] = b;
@@ -457,6 +463,19 @@ function svg(text, opts) {
    geometry they have to agree with. A mistyped row shows up now, loudly,
    rather than as a code that quietly will not scan. */
 function selfCheck() {
+  /* The format bits run most significant first along their path. This is the
+     one convention in this file that a self-consistent encoder can get
+     backwards and still look perfect to itself, and it shipped that way
+     once: the code drew correctly, read back correctly through a reader
+     written to the same mistaken idea, and no camera on earth could parse
+     it. Pinned here at both ends of the path. */
+  var probe = blank(21);
+  placeFormat(probe, 5);
+  var want = formatBits(5);
+  if (probe[8][0] !== ((want >> 14) & 1) || probe[0][8] !== (want & 1)) {
+    throw new Error('qr.js: format information is not most-significant-bit first');
+  }
+
   for (var v = 1; v <= MAX_VERSION; v++) {
     var t = BLOCKS_L[v];
     var fromTable = t[1] * (t[2] + t[0]) + t[3] * (t[4] + t[0]);
