@@ -87,6 +87,17 @@ function route() {
     return;
   }
 
+  /* A scanned invite arrives as #pair/<code>. Hand it to Settings and let
+     the Receive dialog pick it up, then put the address bar back: a code is
+     a one-time thing and has no business staying in the history where a
+     reload would replay it. */
+  var scanned = (location.hash || '').replace(/^#/, '').split('/');
+  if (scanned[0] === 'pair' && scanned.length > 1) {
+    pendingInvite = scanned.slice(1).join('/');
+    location.replace('#settings');
+    return;
+  }
+
   var next = parseHash();
 
   /* Leaving the editor with unsaved work is the one navigation worth
@@ -131,6 +142,12 @@ function route() {
   main.scrollTop = 0;
   window.scrollTo(0, 0);
   updateCounts();
+
+  if (pendingInvite && page === 'settings') {
+    var invite = pendingInvite;
+    pendingInvite = '';
+    openShare('receive', invite);
+  }
 }
 
 /* ---------------- library ---------------- */
@@ -1630,6 +1647,7 @@ function closeGridFull() {
    needs no server, so that is what this does. See the head of share.js. */
 
 var share = null;      /* the live exchange, so a second dialog cannot start one behind the first */
+var pendingInvite = '';   /* an invite that arrived by link, waiting for Settings to be on screen */
 
 function sharingPanelHTML() {
   if (!RLShare.supported()) {
@@ -1654,7 +1672,7 @@ function sharingPanelHTML() {
   '</section>';
 }
 
-function openShare(mode) {
+function openShare(mode, prefill) {
   if (share) { share.close(); share = null; }
 
   var wrap = document.createElement('div');
@@ -1665,7 +1683,14 @@ function openShare(mode) {
   var state2 = { step: 1, code: '', status: '', error: '', result: '', busy: false };
 
   draw();
-  if (sending) beginSend(); else state2.step = 1;
+  if (sending) beginSend();
+  else if (prefill) {
+    /* Arrived by scanning: the code is already in hand, so go straight on
+       rather than showing a box and asking for what we have. */
+    var box = $('#share-in', wrap);
+    if (box) box.value = prefill;
+    advance();
+  }
 
   wrap.addEventListener('click', function (e) {
     if (e.target === wrap || e.target.closest('[data-act="close-modal"]')) return shut();
@@ -1755,6 +1780,24 @@ function openShare(mode) {
     }).catch(fail);
   }
 
+  /* The link the other device is asked to open. Its own camera app reads
+     this; nothing here has to scan anything, which is just as well, because
+     the decoder half is not something a page can count on having. */
+  function pairLink() {
+    return location.origin + location.pathname + '#pair/' + state2.code;
+  }
+
+  function qrBlock() {
+    var link = pairLink();
+    if (!global.RLQr || link.length > RLQr.maxBytes) return '';
+    var svg;
+    try { svg = RLQr.svg(link, { label: 'Invite code' }); }
+    catch (e) { return ''; }
+    return '<div class="qr">' + svg + '</div>' +
+      '<p class="hint">Point the other device\'s camera at this. It opens this page ' +
+      'there with the invite already in hand.</p>';
+  }
+
   function codeBox(label, hint) {
     return '<label class="lbl">' + esc(label) + '</label>' +
       '<textarea id="share-code" rows="3" readonly onclick="this.select()">' + esc(state2.code) + '</textarea>' +
@@ -1776,10 +1819,15 @@ function openShare(mode) {
       body = '<p class="stat ok">' + esc(state2.result) + '</p>';
     } else if (sending) {
       body =
-        '<p class="hint"><strong>1.</strong> Send this code to the other device, then open ' +
-        'Settings there and choose <em>Receive</em>.</p>' +
-        (state2.code ? codeBox('Your invite code') : '<p class="hint">Preparing…</p>') +
-        '<p class="hint"><strong>2.</strong> It will give you a reply code. Paste it here.</p>' +
+        '<p class="hint"><strong>1.</strong> Scan this with the other device.</p>' +
+        (state2.code
+          ? qrBlock() +
+            '<details class="share-alt"><summary>Cannot scan it?</summary>' +
+            '<p class="hint">Send this code across instead, and paste it into ' +
+            '<em>Receive</em> in Settings there.</p>' +
+            codeBox('Your invite code') + '</details>'
+          : '<p class="hint">Preparing…</p>') +
+        '<p class="hint"><strong>2.</strong> The other device shows a reply code. Paste it here.</p>' +
         inputBox('Reply code', '', 'Connect and send');
     } else if (state2.step === 1) {
       body =

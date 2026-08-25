@@ -565,6 +565,21 @@ table.rgrid { border-collapse: collapse; width: 100%; min-width: 520px; font-siz
 }
 .pick-row:hover { background: var(--row-hover); color: var(--accent); }
 
+/* A QR stays black on white in both themes. Inverted codes are read by some
+   cameras and not others, and there is no reason to find out which. */
+.qr {
+  /* As large as the dialog allows. A version 17 code is 85 modules across,
+     and a camera reading off a screen wants three or four pixels of each;
+     at 280px it was under three. */
+  width: min(360px, 86vw); margin: .6rem auto .2rem;
+  background: #fff; border-radius: 8px; padding: 6px;
+  border: 1px solid var(--line);
+}
+.qr svg { display: block; width: 100%; height: auto; }
+.share-alt { margin-top: .5rem; }
+.share-alt summary { cursor: pointer; color: var(--accent); font-size: .85rem; }
+.share-alt[open] summary { margin-bottom: .3rem; }
+
 /* Month calendar, for planning further out than the quick list reaches.
    min-height rather than aspect-ratio: the latter is too new for the older
    Safari this has to keep working on. */

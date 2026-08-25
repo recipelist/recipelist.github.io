@@ -67,27 +67,39 @@ function gathered(pc) {
    saying which so a code made on one device is read correctly on the other
    even when the two browsers do not agree about CompressionStream. */
 
+/* base64url rather than base64: a code goes into a link as it stands, with
+   no escaping to inflate it and nothing for a mail client to mangle. */
+function b64url(s) {
+  return global.btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function unb64url(s) {
+  var t = String(s).replace(/-/g, '+').replace(/_/g, '/');
+  while (t.length % 4) t += '=';
+  return global.atob(t);
+}
+
 function bytesToB64(bytes) {
   var s = '', i;
   for (i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
-  return global.btoa(s);
+  return b64url(s);
 }
 
 function b64ToBytes(b64) {
-  var s = global.atob(b64), out = new Uint8Array(s.length), i;
+  var s = unb64url(b64), out = new Uint8Array(s.length), i;
   for (i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
   return out;
 }
 
 function encode(sdp) {
   if (typeof global.CompressionStream !== 'function') {
-    return Promise.resolve('R0' + global.btoa(sdp));
+    return Promise.resolve('R0' + b64url(sdp));
   }
   var stream = new global.Blob([sdp]).stream().pipeThrough(new global.CompressionStream('deflate-raw'));
   return new global.Response(stream).arrayBuffer().then(function (buf) {
     return 'R1' + bytesToB64(new Uint8Array(buf));
   }).catch(function () {
-    return 'R0' + global.btoa(sdp);
+    return 'R0' + b64url(sdp);
   });
 }
 
@@ -96,7 +108,7 @@ function decode(code) {
   var mark = body.slice(0, 2);
   body = body.slice(2);
   if (mark === 'R0') {
-    try { return Promise.resolve(checkSdp(global.atob(body))); }
+    try { return Promise.resolve(checkSdp(unb64url(body))); }
     catch (e) { return Promise.reject(damaged()); }
   }
   if (mark !== 'R1') return Promise.reject(new Error('That does not look like a code from this app.'));
