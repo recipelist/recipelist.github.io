@@ -84,7 +84,7 @@ Files:
 - `js/qr.js` — the QR encoder, written out rather than pulled in
 - `js/vcode.js` — the reply code and its reader, also written out
 - `js/scan.js` — the camera viewfinder
-- `js/share.js` — the device-to-device transfer
+- `js/beam.js` — the collection cut into frames, and put back together
 - `js/grid.js` — the tree, and the grid and list renderers
 - `js/samples.js` — the eight demo recipes
 - `js/app.js` — routing, pages, editor, cook mode, planner, list
@@ -122,32 +122,30 @@ export stays the way. And browsers grant file-write permission for one visit
 at a time, so after a refresh the panel shows **Paused** with a Resume button
 until you pick *Allow on every visit* in the browser's own prompt.
 
-### Sharing between your devices
+### Sending recipes to another device
 
-Settings has a **Sharing** panel. It sends the whole collection from one
-browser straight to another over WebRTC: the recipes go directly between the
-two devices and nothing about them is stored anywhere in between.
+Settings has a **Sharing** panel. Press the button and this device puts the
+whole collection on its screen as a repeating loop of codes. On the other
+device, point the camera at the first one; it opens this page, asks whether
+you want the recipes, and reads the rest of the loop while you hold it there.
+It shows how many parts it has as it goes, and tells you when it is done.
 
-The two devices cannot find each other on their own, and that is not an
-oversight. Discovery is the one thing a service like PairDrop keeps a server
-for, and this site has none: a page cannot open a socket, cannot listen for a
-connection, cannot ask mDNS anything, and is not even told its own address on
-the network. So you introduce the two devices yourself.
-
-Nothing is typed and nothing is pasted. The sending device shows a **QR
-code**; you scan it with the other device's camera, which opens this page
-there. That device answers with a code of its own on screen, and the sender
-reads it back with its camera. The sender then says it is connected and how
-many recipes it is about to send, you press confirm, and across they go.
-
-Two scans, one each way, because that is the floor: a connection needs two
-messages and information only travels from a screen into a camera.
+Nothing is typed, pasted or paired, and there is no second code to carry
+back. There is also no network: no server, no connection, no accounts. The
+recipes travel as light, from one screen into one camera, and both devices
+can be in aeroplane mode.
 
 What arrives is **merged**, exactly as an imported backup is: the same recipe
 keeps whichever side is newer, and nothing you already have is removed. Only
-pair with a device you own or a person you trust.
+do this with a device you own or a person you trust.
 
-## Licence
+Two honest limits. It is one way, so the sending screen has no way of knowing
+when the other device has finished; keep it showing until that device says
+so. And it is paced by how much there is: eight recipes is nine codes and a
+few seconds of holding still, while a very large collection takes
+proportionally longer.
+
+## Licence## Licence
 
 MIT, for the code. The recipes you enter are yours. The eight sample recipes
 are written for this project and go with the code.

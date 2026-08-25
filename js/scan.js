@@ -17,8 +17,10 @@ function supported() {
          !!global.RLVCode;
 }
 
-/* Resolves with the decoded bytes, or rejects if the camera is refused or
-   the user backs out. */
+/* Keeps reading. Every code it manages to decode goes to handlers.oncode,
+   and scanning stops when that says it has everything, or when the caller
+   cancels. A transfer is a loop of frames rather than a single code, so
+   stopping at the first one read would be stopping at the beginning. */
 function scan(host, handlers) {
   handlers = handlers || {};
   var video = document.createElement('video');
@@ -76,7 +78,7 @@ function scan(host, handlers) {
 
     var bytes = null;
     try { bytes = RLVCode.decode(img); } catch (e) { bytes = null; }
-    if (bytes) { stop(); done(bytes); }
+    if (bytes && handlers.oncode && handlers.oncode(bytes) === true) { stop(); done(true); }
   }
 
   return { result: result, cancel: function () { stop(); failed(new Error('cancelled')); } };
