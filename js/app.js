@@ -243,7 +243,8 @@ function renderRecipes() {
       'Add a recipe by hand, or paste one in from anywhere and let it be pulled apart into ingredients and steps.',
       '<button class="btn accent" data-act="new">New recipe</button>' +
       '<button class="btn" data-act="paste">Paste one in</button>' +
-      '<button class="btn ghost" data-act="demo">Load sample recipes</button>');
+      '<button class="btn ghost" data-act="demo">Load sample recipes</button>' +
+      '<button class="btn ghost" data-act="plan">Load the meal plan recipes</button>');
   } else if (!list.length) {
     html += emptyState('No matches', 'Nothing here answers to that. Try fewer words, or clear the filters.',
       '<button class="btn" data-act="reset">Clear filters</button>');
@@ -919,6 +920,14 @@ function renderSettings() {
     '<p class="hint">' + (prefs.demoLoaded
       ? 'Clearing them leaves alone any sample you have since edited: once you change one, it is yours.'
       : 'Eight recipes to look around with, including the coffee cake the grid format is usually shown with.') + '</p>' +
+    '<div class="btn-row">' +
+      (prefs.planLoaded
+        ? '<button class="btn ghost" data-act="unplan">Remove the meal plan recipes</button>'
+        : '<button class="btn ghost" data-act="plan">Load the meal plan recipes</button>') +
+    '</div>' +
+    '<p class="hint">' + (prefs.planLoaded
+      ? 'Removing them leaves alone any meal plan recipe you have since edited: once you change one, it is yours.'
+      : 'Twenty-two high protein recipes from a one-week metabolism support meal plan, each with its calories and macros in the notes. Tagged "meal plan".') + '</p>' +
   '</section>' +
 
   autosavePanelHTML() +
@@ -1205,6 +1214,16 @@ function handleClick(e) {
     case 'undemo':
       var removed = RLStore.clearDemo(RLSamples);
       toast(removed ? removed + ' sample recipes removed.' : 'Nothing left to remove; the samples have all been edited, so they are yours now.');
+      renderSettings(); updateCounts();
+      break;
+    case 'plan':
+      RLStore.loadDemo(RLMealPlan, 'planLoaded');
+      toast('Meal plan recipes loaded.');
+      route();
+      break;
+    case 'unplan':
+      var gone = RLStore.clearDemo(RLMealPlan, 'planLoaded');
+      toast(gone ? gone + ' meal plan recipes removed.' : 'Nothing left to remove; the meal plan recipes have all been edited, so they are yours now.');
       renderSettings(); updateCounts();
       break;
     case 'reset':

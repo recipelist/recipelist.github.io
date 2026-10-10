@@ -265,7 +265,7 @@ function setShop(s) { return changed(saveJSON(K.shop, s)); }
 
 /* ---------- preferences ---------- */
 
-var DEFAULT_PREFS = { view: 'grid', sort: 'updated', density: 'comfortable', demoLoaded: false };
+var DEFAULT_PREFS = { view: 'grid', sort: 'updated', density: 'comfortable', demoLoaded: false, planLoaded: false };
 
 function getPrefs() {
   var p = loadJSON(K.prefs, {});
@@ -327,15 +327,17 @@ function importData(data, opts) {
   return { added: added, updated: updated, skipped: skipped };
 }
 
-function loadDemo(demoRecipes) {
+/* A bundled set (the samples, the meal plan) is imported like any backup;
+   `prefKey` is the preference that remembers it was loaded. */
+function loadDemo(demoRecipes, prefKey) {
   var res = importData({ recipes: demoRecipes }, {});
-  setPref('demoLoaded', true);
+  setPref(prefKey || 'demoLoaded', true);
   return res;
 }
 
-/* Removes only recipes that came from the sample set and were never edited,
-   so a demo clear cannot take a recipe the user has since made their own. */
-function clearDemo(demoRecipes) {
+/* Removes only recipes that came from the bundled set and were never edited,
+   so a clear cannot take a recipe the user has since made their own. */
+function clearDemo(demoRecipes, prefKey) {
   var demoIds = {};
   demoRecipes.forEach(function (d) { demoIds[d.id] = d; });
   var list = all(), removed = 0, i;
@@ -343,7 +345,7 @@ function clearDemo(demoRecipes) {
     var d = demoIds[list[i].id];
     if (d && list[i].updated === d.updated) { list.splice(i, 1); removed++; }
   }
-  setPref('demoLoaded', false);
+  setPref(prefKey || 'demoLoaded', false);
   persist();
   return removed;
 }

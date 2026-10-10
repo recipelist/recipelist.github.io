@@ -60,7 +60,13 @@ takes it full screen with the ingredient column pinned.
   across recipes and grouping them by aisle, plus anything else you add by
   hand. The tab carries a count of what is still to buy.
 - **Settings** — dark or light, default view, export and import, auto-save to
-  a file with the storage health readout beside it.
+  a file with the storage health readout beside it, and two bundled sets you
+  can load or clear: the eight samples, and the meal plan recipes.
+- **Meal plan recipes**: twenty-two high protein recipes from a one-week
+  metabolism support meal plan (four breakfasts, four lunches, seven dinners,
+  seven snacks), each with its calories and macros per serving in the notes
+  and tagged `meal plan`. Loaded from Settings like the samples, and cleared
+  the same way; edit one and it is yours to keep.
 
 Dark mode is the default. Everything you enter stays in this browser.
 
@@ -81,6 +87,7 @@ Files:
 - `js/parse.js` — paste-and-parse, JSON-LD, the step-link guess, timers
 - `js/grid.js` — the tree, and the grid and list renderers
 - `js/samples.js` — the eight demo recipes
+- `js/mealplan.js`: the twenty-two meal plan recipes
 - `js/app.js` — routing, pages, editor, cook mode, planner, list
 
 ## Your recipes are only as safe as this browser
@@ -119,4 +126,4 @@ until you pick *Allow on every visit* in the browser's own prompt.
 ## Licence## Licence
 
 MIT, for the code. The recipes you enter are yours. The eight sample recipes
-are written for this project and go with the code.
+and the meal plan recipes are written for this project and go with the code.
