@@ -302,7 +302,7 @@ function exportData() {
 function importData(data, opts) {
   opts = opts || {};
   if (!data || !Array.isArray(data.recipes)) throw new Error('That file has no recipes in it.');
-  var list = all(), byId = {}, bySig = {}, added = 0, updated = 0, skipped = 0;
+  var list = all(), byId = {}, bySig = {}, added = 0, updated = 0, skipped = 0, idMap = {};
 
   function sig(r) {
     return (r.title || '').trim().toLowerCase() + '|' + r.ingredients.length + '|' + r.steps.length;
@@ -311,7 +311,8 @@ function importData(data, opts) {
 
   data.recipes.map(normalise).forEach(function (inc) {
     var cur = byId[inc.id] || bySig[sig(inc)];
-    if (!cur) { list.push(inc); byId[inc.id] = inc; bySig[sig(inc)] = inc; added++; return; }
+    if (!cur) { list.push(inc); byId[inc.id] = inc; bySig[sig(inc)] = inc; idMap[inc.id] = inc.id; added++; return; }
+    idMap[inc.id] = cur.id;
     if (new Date(inc.updated) > new Date(cur.updated)) {
       inc.id = cur.id;                       /* keep the id the plan points at */
       inc.created = cur.created || inc.created;
@@ -324,7 +325,65 @@ function importData(data, opts) {
   persist();
   if (opts.withPlan && data.plan) setPlan(data.plan);
   if (opts.withPlan && data.shop) setShop(data.shop);
-  return { added: added, updated: updated, skipped: skipped };
+  /* idMap says where each incoming recipe ended up, which is what a plan
+     file needs to repoint its days at the copies this browser already had. */
+  return { added: added, updated: updated, skipped: skipped, idMap: idMap };
+}
+
+/* A plan file carries the days plus the recipes they point at, so it can be
+   opened on a browser that has never seen those recipes. Nothing else from
+   the collection goes along; this is the plan, not the cookbook. */
+function exportPlan() {
+  var plan = getPlan(), ids = {}, recipes = [];
+  Object.keys(plan.days).forEach(function (d) {
+    (plan.days[d] || []).forEach(function (e) {
+      var r = e && get(e.recipe);
+      if (r && !ids[r.id]) { ids[r.id] = 1; recipes.push(r); }
+    });
+  });
+  return {
+    format: 'recipelist-plan',
+    schema: SCHEMA,
+    exported: new Date().toISOString(),
+    plan: plan,
+    recipes: recipes
+  };
+}
+
+/* Merges a plan file, or a full backup, into the planner. The recipes come
+   in first through importData, so whatever id the file uses for a recipe is
+   repointed at the copy this browser keeps. Days are merged, never
+   replaced: a meal already on a day is left alone, a new one is added. An
+   entry whose recipe is in neither the file nor the collection is skipped
+   rather than planned as a blank. */
+function importPlan(data) {
+  if (!data || !data.plan || typeof data.plan !== 'object' || !data.plan.days || typeof data.plan.days !== 'object') {
+    throw new Error('That file has no meal plan in it.');
+  }
+  var idMap = {}, rres = { added: 0, updated: 0, skipped: 0 };
+  if (Array.isArray(data.recipes) && data.recipes.length) {
+    rres = importData({ recipes: data.recipes }, {});
+    idMap = rres.idMap;
+  }
+  var plan = getPlan(), planned = 0, already = 0, missing = 0;
+  Object.keys(data.plan.days).forEach(function (d) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || !Array.isArray(data.plan.days[d])) return;
+    var cur = plan.days[d] || [];
+    data.plan.days[d].forEach(function (e) {
+      if (!e || typeof e.recipe !== 'string') return;
+      var id = idMap[e.recipe] || e.recipe;
+      var r = get(id);
+      if (!r) { missing++; return; }
+      var dup = cur.some(function (x) { return x.recipe === id; });
+      if (dup) { already++; return; }
+      var servings = (typeof e.servings === 'number' && e.servings > 0) ? e.servings : r.servings;
+      cur.push({ recipe: id, servings: servings });
+      planned++;
+    });
+    if (cur.length) plan.days[d] = cur;
+  });
+  setPlan(plan);
+  return { planned: planned, already: already, missing: missing, recipes: rres };
 }
 
 function loadDemo(demoRecipes) {
@@ -357,6 +416,7 @@ global.RLStore = {
   getPrefs: getPrefs, setPrefs: setPrefs, setPref: setPref,
   getTheme: getTheme, setTheme: setTheme,
   exportData: exportData, importData: importData,
+  exportPlan: exportPlan, importPlan: importPlan,
   loadDemo: loadDemo, clearDemo: clearDemo,
   health: function () { return { ok: storageOK, error: lastError }; }
 };
