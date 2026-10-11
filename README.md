@@ -55,7 +55,8 @@ takes it full screen with the ingredient column pinned.
   minutes"), and the screen kept awake.
 - **Meal Plan** — a week planner you can page back and forth through.
   Planning from a recipe offers the next fortnight, or a calendar for any date
-  beyond it.
+  beyond it. The plan exports to its own file, carrying the recipes it uses,
+  and importing one merges it into the planner (a full backup works there too).
 - **Shopping** — everything the plan needs, merging duplicate ingredients
   across recipes and grouping them by aisle, plus anything else you add by
   hand. The tab carries a count of what is still to buy.

@@ -782,6 +782,14 @@ function planHTML() {
     (any ? '<button class="btn ghost" data-act="weekclear">Clear the week</button>' : '') +
   '</div>';
   if (!RLStore.all().length) html += '<p class="hint">Add a recipe or two first and they will show up here to plan with.</p>';
+  var anyAtAll = Object.keys(plan.days).some(function (k) { return (plan.days[k] || []).length; });
+  html += '<div class="plan-foot plan-files">' +
+    '<button class="btn" data-act="planexport"' + (anyAtAll ? '' : ' disabled') + '>Export the plan</button>' +
+    '<button class="btn" data-act="planimport">Import a plan</button>' +
+    '<input type="file" id="importplanfile" accept="application/json,.json" hidden>' +
+  '</div>' +
+  '<p class="hint">A plan file holds every planned day and the recipes they use, so it opens on a browser that has never seen them. ' +
+  'Importing merges: meals already on a day stay put, new ones are added, and nothing is removed. A full backup works here too.</p>';
   return html;
 }
 
@@ -1310,6 +1318,12 @@ function handleClick(e) {
       break;
     }
     case 'week2list': weekToList(); break;
+    case 'planexport': {
+      download('meal-plan-' + new Date().toISOString().slice(0, 10) + '.json', JSON.stringify(RLStore.exportPlan(), null, 2));
+      toast('Plan downloaded.');
+      break;
+    }
+    case 'planimport': $('#importplanfile').click(); break;
     case 'weekclear': {
       if (!confirm('Clear every meal planned for this week?')) break;
       var p2 = RLStore.getPlan(), s2 = weekStart(state.weekOffset);
@@ -1873,6 +1887,26 @@ function onImportFile(file) {
   reader.readAsText(file);
 }
 
+function onImportPlanFile(file) {
+  var reader = new FileReader();
+  reader.onload = function () {
+    var data;
+    try { data = JSON.parse(reader.result); }
+    catch (e) { toast('That file is not readable JSON.', 'bad'); return; }
+    var res;
+    try { res = RLStore.importPlan(data); }
+    catch (e2) { toast(e2.message, 'bad'); return; }
+    var bits = [res.planned + ' meal' + (res.planned === 1 ? '' : 's') + ' planned'];
+    if (res.already) bits.push(res.already + ' already there');
+    if (res.missing) bits.push(res.missing + ' skipped, recipe missing');
+    if (res.recipes.added) bits.push(res.recipes.added + ' recipe' + (res.recipes.added === 1 ? '' : 's') + ' added');
+    toast(bits.join(', ') + '.', res.missing ? 'bad' : undefined);
+    redrawKitchen();
+    updateCounts();
+  };
+  reader.readAsText(file);
+}
+
 /* ---------------- boot ---------------- */
 
 function init() {
@@ -1902,6 +1936,7 @@ function init() {
   document.addEventListener('change', function (e) {
     var el = e.target;
     if (el.id === 'importfile' && el.files && el.files[0]) { onImportFile(el.files[0]); el.value = ''; return; }
+    if (el.id === 'importplanfile' && el.files && el.files[0]) { onImportPlanFile(el.files[0]); el.value = ''; return; }
     var act = el.getAttribute && el.getAttribute('data-act');
     if (act === 'cooktick') { cook.checked[el.getAttribute('data-id')] = el.checked; drawCook(); }
   });
