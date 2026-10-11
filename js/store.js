@@ -386,24 +386,41 @@ function importPlan(data) {
   return { planned: planned, already: already, missing: missing, recipes: rres };
 }
 
-function loadDemo(demoRecipes) {
+/* The sample week goes in through the same merge a plan file does, so a
+   meal the user already has on a day is never doubled by loading the demo
+   twice. */
+function loadDemo(demoRecipes, demoPlan) {
   var res = importData({ recipes: demoRecipes }, {});
+  if (demoPlan) res.plan = importPlan({ plan: demoPlan, recipes: [] });
   setPref('demoLoaded', true);
   return res;
 }
 
 /* Removes only recipes that came from the sample set and were never edited,
-   so a demo clear cannot take a recipe the user has since made their own. */
+   so a demo clear cannot take a recipe the user has since made their own.
+   Whatever is removed is also swept out of the planner and the shopping
+   list, exactly as deleting a recipe by hand would. */
 function clearDemo(demoRecipes) {
-  var demoIds = {};
+  var demoIds = {}, gone = {};
   demoRecipes.forEach(function (d) { demoIds[d.id] = d; });
   var list = all(), removed = 0, i;
   for (i = list.length - 1; i >= 0; i--) {
     var d = demoIds[list[i].id];
-    if (d && list[i].updated === d.updated) { list.splice(i, 1); removed++; }
+    if (d && list[i].updated === d.updated) { gone[list[i].id] = 1; list.splice(i, 1); removed++; }
   }
   setPref('demoLoaded', false);
   persist();
+  if (removed) {
+    var plan = getPlan();
+    Object.keys(plan.days).forEach(function (k) {
+      plan.days[k] = (plan.days[k] || []).filter(function (e) { return !gone[e.recipe]; });
+      if (!plan.days[k].length) delete plan.days[k];
+    });
+    setPlan(plan);
+    var shop = getShop();
+    shop.recipes = shop.recipes.filter(function (e) { return !gone[e.recipe]; });
+    setShop(shop);
+  }
   return removed;
 }
 

@@ -223,5 +223,41 @@ make('guac', 'Guacamole', {
 
 ];
 
+/* A week of meals built from the recipes above. The planner keys days by
+   date, so the week is laid out fresh each time against the current Monday
+   rather than stored as fixed dates that would soon be in the past. Monday
+   is index 0, the same convention the planner uses. Servings are left to
+   each recipe's own default. */
+var WEEK = [
+  ['oats', 'pasta'],
+  ['chili'],
+  ['chicken'],
+  [],
+  ['guac'],
+  ['pancakes', 'cookies'],
+  ['oats', 'coffeecake']
+];
+
+function samplePlan() {
+  var byId = {};
+  RECIPES.forEach(function (r) { byId[r.id] = r; });
+  var start = new Date();
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - (start.getDay() + 6) % 7);
+  var days = {};
+  WEEK.forEach(function (keys, i) {
+    if (!keys.length) return;
+    var d = new Date(start); d.setDate(d.getDate() + i);
+    var k = d.getFullYear() + '-' + two(d.getMonth() + 1) + '-' + two(d.getDate());
+    days[k] = keys.map(function (key) {
+      var r = byId['demo_' + key];
+      return { recipe: r.id, servings: r.servings };
+    });
+  });
+  return { start: null, days: days };
+}
+function two(n) { return (n < 10 ? '0' : '') + n; }
+
 global.RLSamples = RECIPES;
+global.RLSamplePlan = samplePlan;
 })(window);

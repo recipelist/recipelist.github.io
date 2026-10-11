@@ -81,7 +81,7 @@ Files:
 - `js/store.js` — everything that touches localStorage
 - `js/parse.js` — paste-and-parse, JSON-LD, the step-link guess, timers
 - `js/grid.js` — the tree, and the grid and list renderers
-- `js/samples.js` — the eight demo recipes
+- `js/samples.js` — the eight demo recipes and the sample week they fill
 - `js/app.js` — routing, pages, editor, cook mode, planner, list
 
 ## Your recipes are only as safe as this browser

@@ -925,8 +925,8 @@ function renderSettings() {
         : '<button class="btn ghost" data-act="demo">Load sample recipes</button>') +
     '</div>' +
     '<p class="hint">' + (prefs.demoLoaded
-      ? 'Clearing them leaves alone any sample you have since edited: once you change one, it is yours.'
-      : 'Eight recipes to look around with, including the coffee cake the grid format is usually shown with.') + '</p>' +
+      ? 'Clearing them leaves alone any sample you have since edited: once you change one, it is yours. Any sample still in the planner or on the shopping list goes with it.'
+      : 'Eight recipes to look around with, including the coffee cake the grid format is usually shown with, plus a week of them in the meal plan so the planner and the shopping list have something to work on.') + '</p>' +
   '</section>' +
 
   autosavePanelHTML() +
@@ -1206,8 +1206,8 @@ function handleClick(e) {
     case 'new': state.editor = null; state.dirty = false; go('new'); break;
     case 'paste': openPaste(); break;
     case 'demo':
-      RLStore.loadDemo(RLSamples);
-      toast('Sample recipes loaded.');
+      RLStore.loadDemo(RLSamples, RLSamplePlan());
+      toast('Sample recipes loaded, and this week planned.');
       route();
       break;
     case 'undemo':
