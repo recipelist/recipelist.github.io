@@ -670,8 +670,18 @@ body.cooking { overflow: hidden; }
 /* ── Phones ─────────────────────────────────────────────────────────── */
 
 @media (max-width: 700px) {
-  body { padding: .7rem; padding-bottom: calc(5.2rem + env(safe-area-inset-bottom, 0px)); }
-  .app { display: block; }
+  /* The document itself never scrolls on a phone; only .main does. Saved to
+     the home screen, iOS loses track of position:fixed elements when the
+     page rubber-bands at the top, and the bottom bar floated up into the
+     middle of the screen. A full-height column with the bar as its last row
+     leaves iOS nothing to misplace. */
+  html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+  body { padding: 0; }
+  .app { display: flex; flex-direction: column; align-items: stretch; gap: 0; height: 100%; height: 100dvh; }
+  .main {
+    flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain;
+    padding: max(.7rem, env(safe-area-inset-top, 0px)) .7rem 1.2rem;
+  }
   .brand { display: none; }
   .panel { padding: .85rem; }
 
@@ -683,7 +693,7 @@ body.cooking { overflow: hidden; }
   .page-brand .brand-logo { width: 26px; height: 26px; }
 
   .tabs {
-    position: fixed; left: 0; right: 0; bottom: 0; top: auto; z-index: 90;
+    position: relative; order: 1; flex-shrink: 0; z-index: 90;
     flex-direction: row; width: auto; gap: 0; margin: 0;
     background: var(--panel); border-top: 1px solid var(--line); border-right: none;
     padding: .3rem .2rem calc(.3rem + env(safe-area-inset-bottom, 0px));
@@ -738,7 +748,8 @@ body.cooking { overflow: hidden; }
 @media print {
   body { padding: 0; background: #fff; color: #000; }
   .tabs, .actionbar, .viewbar, .crumb, .toast, .gridnote-wrap, .page-brand { display: none !important; }
-  .app, .main { display: block; max-width: none; }
+  html, body { height: auto; overflow: visible; }
+  .app, .main { display: block; max-width: none; height: auto; overflow: visible; }
   .panel, .grid-wrap { break-inside: avoid; box-shadow: none; }
   .rgrid th, .rgrid td { border-color: #999 !important; }
   .rgrid td.g-op { background: #f0f0f0 !important; color: #000 !important; }
