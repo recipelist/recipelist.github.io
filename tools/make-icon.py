@@ -9,8 +9,12 @@
 # **Keep the three copies in step**: favicon.svg, the .brand-logo inline SVG in
 # index.html, and this file. If the mark changes, change all three and re-run.
 #
-#     python tools/make-icon.py            # writes assets/icon-512.png
-#     python tools/make-icon.py 192 512    # any sizes you like
+#     python tools/make-icon.py            # writes the full set, see OUTPUTS
+#     python tools/make-icon.py 192 512    # just assets/icon-<size>.png
+#
+# The PNGs exist because iOS ignores SVG icons: "Add to Home Screen" (Safari,
+# and Chrome on iOS, which is WebKit too) only takes a PNG apple-touch-icon and
+# otherwise shows a letter tile. index.html links every file in OUTPUTS.
 import os
 import sys
 import math
@@ -61,14 +65,22 @@ HANDLES = [[(9, 22), (6, 22)], [(31, 22), (34, 22)]]
 STEAM = bezier_points((20, 14), (23, 12), (23, 10), (20, 8))
 
 
-def draw(size):
-    """The mark at `size` px, drawn large and downsampled."""
+def draw(size, square=False):
+    """The mark at `size` px, drawn large and downsampled.
+
+    `square` fills the whole tile instead of rounding the corners, for the
+    apple-touch-icon: iOS cuts its own rounded mask, and transparent corners
+    underneath it would show as a dark ring.
+    """
     px = size * SS
     scale = px / VIEW
     img = Image.new("RGBA", (px, px), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
 
-    d.rounded_rectangle([0, 0, px - 1, px - 1], radius=RADIUS * scale, fill=BG)
+    if square:
+        d.rectangle([0, 0, px - 1, px - 1], fill=BG)
+    else:
+        d.rounded_rectangle([0, 0, px - 1, px - 1], radius=RADIUS * scale, fill=BG)
 
     w = max(1, round(STROKE * scale))
     r = w / 2.0
@@ -95,13 +107,26 @@ def draw(size):
     return img.resize((size, size), Image.LANCZOS)
 
 
+# (path from the repo root, size, square)
+OUTPUTS = [
+    ("apple-touch-icon.png", 180, True),
+    ("favicon-32x32.png", 32, False),
+    ("favicon-16x16.png", 16, False),
+    ("assets/icon-192.png", 192, False),
+    ("assets/icon-512.png", 512, False),
+]
+
+
 def main():
-    sizes = [int(a) for a in sys.argv[1:]] or [512]
-    os.makedirs(ASSETS, exist_ok=True)
-    for size in sizes:
-        path = os.path.join(ASSETS, "icon-%d.png" % size)
-        draw(size).save(path)
-        print("wrote %s (%dx%d)" % (os.path.relpath(path, ROOT), size, size))
+    if sys.argv[1:]:
+        outputs = [("assets/icon-%d.png" % int(a), int(a), False) for a in sys.argv[1:]]
+    else:
+        outputs = OUTPUTS
+    for rel, size, square in outputs:
+        path = os.path.join(ROOT, rel)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        draw(size, square).save(path)
+        print("wrote %s (%dx%d)" % (rel, size, size))
 
 
 if __name__ == "__main__":
